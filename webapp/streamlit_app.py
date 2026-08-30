@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import plotly.express as px
 import streamlit as st
@@ -63,8 +64,29 @@ if st.button("开始分析", type="primary", use_container_width=True) and quest
         except Exception as exc:
             st.error(f"分析失败：{exc}")
 
+def _render_clarification(result: dict[str, Any], app: DesktopApp) -> None:
+    options = result.get("clarification", {}).get("options", [])
+    if not options:
+        st.warning(result.get("answer", "需要补充信息后才能继续。"))
+        return
+    st.info("问题中的指标存在多个口径，请先确认本次分析采用哪一个：")
+    labels = {item["label"]: item["value"] for item in options}
+    choice = st.selectbox("分析口径", list(labels), key="clarify_choice")
+    if st.button("确认口径并继续", type="primary"):
+        with st.spinner("Agent 正在按确认的口径继续执行…"):
+            try:
+                st.session_state["result"] = app.resume(
+                    result["thread_id"], labels[choice]
+                )
+                st.rerun()
+            except Exception as exc:
+                st.error(f"分析失败：{exc}")
+
+
 result = st.session_state.get("result")
-if result:
+if result and result.get("status") == "clarification":
+    _render_clarification(result, app)
+elif result:
     left, right = st.columns([1.2, 1])
     with left:
         st.subheader("结论")

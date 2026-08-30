@@ -79,7 +79,12 @@ class DesktopApp:
 
     def analyze(self, question: str, metric_choice: str | None = None) -> dict[str, Any]:
         settings = get_settings()
-        if settings.llm_mode == "live" and settings.llm_api_key:
+        if settings.llm_mode == "live":
+            if not settings.llm_api_key:
+                raise ValueError(
+                    "DATAPILOT_LLM_MODE=live 但缺少 DATAPILOT_LLM_API_KEY；"
+                    "请在 D:\\agent-gpt\\.env 配置 Key 后重启，或改用 mock 模式。"
+                )
             loop = build_live_tool_loop(
                 self.project_root,
                 api_key=settings.llm_api_key,
@@ -93,6 +98,12 @@ class DesktopApp:
         graph = build_graph(self.project_root)
         graph.context = ToolContext("desktop", self.workspace, self.output)
         return graph.invoke(question, metric_choice=metric_choice)
+
+    def resume(self, thread_id: str, value: str) -> dict[str, Any]:
+        """按澄清线程继续执行（mock 模式的口径确认走这条链路）。"""
+        graph = build_graph(self.project_root)
+        graph.context = ToolContext("desktop", self.workspace, self.output)
+        return graph.resume(thread_id, value)
 
     def _normalize_live(self, question: str, result: dict[str, Any]) -> dict[str, Any]:
         trace = result.get("tool_trace", [])

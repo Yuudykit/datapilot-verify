@@ -28,6 +28,15 @@ def desktop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DesktopApp:
     target.mkdir(parents=True)
     for name in ("orders.csv", "stores.csv"):
         (target / name).write_bytes((sample / name).read_bytes())
+    semantic = tmp_path / "data" / "semantic"
+    knowledge = tmp_path / "data" / "knowledge"
+    semantic.mkdir(parents=True)
+    knowledge.mkdir(parents=True)
+    (semantic / "metrics.yml").write_bytes(
+        (Path(__file__).parents[1] / "data" / "semantic" / "metrics.yml").read_bytes()
+    )
+    for item in (Path(__file__).parents[1] / "data" / "knowledge").glob("*.md"):
+        (knowledge / item.name).write_bytes(item.read_bytes())
     return DesktopApp(tmp_path)
 
 
@@ -49,6 +58,37 @@ def test_upload_valid_orders_replaces_workspace(desktop: DesktopApp) -> None:
 def test_upload_rejects_missing_columns(desktop: DesktopApp) -> None:
     with pytest.raises(ValueError, match="缺少字段"):
         desktop.upload("bad.csv", b"order_id\no-1\n", "orders")
+
+
+def test_clarification_round_trip_through_desktop(desktop: DesktopApp) -> None:
+    first = desktop.analyze("7 月销售额为什么下降？")
+    assert first["status"] == "clarification"
+    assert first["clarification"]["options"]
+    resumed = desktop.resume(first["thread_id"], "net_sales")
+    assert resumed["status"] == "completed"
+    assert resumed["snapshot_id"]
+
+
+def test_live_mode_without_api_key_fails_loudly(
+    desktop: DesktopApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import webapp.desktop as desktop_module
+
+    monkeypatch.setattr(
+        desktop_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            workspace_root=Path("workspace"),
+            artifact_root=Path("artifacts"),
+            llm_mode="live",
+            llm_api_key=None,
+            llm_model="fake",
+            llm_base_url="",
+            max_tool_steps=4,
+        ),
+    )
+    with pytest.raises(ValueError, match="DATAPILOT_LLM_API_KEY"):
+        desktop.analyze("7 月净销售额为什么下降？")
 
 
 def test_normalize_live_result_creates_snapshot(desktop: DesktopApp) -> None:
