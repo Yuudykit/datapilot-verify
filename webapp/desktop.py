@@ -21,6 +21,73 @@ def _valid_snapshot_id(snapshot_id: str) -> bool:
     return bool(_SNAPSHOT_ID_PATTERN.match(snapshot_id))
 
 
+def normalize_live_result(
+    question: str, result: dict[str, Any], workspace: Path, output_dir: Path
+) -> dict[str, Any]:
+    """把 live 工具循环的原始输出归一化为界面/API 使用的统一结构，
+    并为成功的 run_analysis 生成审计快照。桌面端与 API 共用。"""
+    trace = result.get("tool_trace", [])
+    successful = [item for item in trace if item.get("result", {}).get("ok")]
+    analysis = next((item for item in successful if item.get("name") == "run_analysis"), None)
+    events = [
+        {
+            "tool": item.get("name"),
+            "trace_id": item.get("result", {}).get("trace_id", ""),
+            "ok": item.get("result", {}).get("ok", False),
+            "label": item.get("name", "tool"),
+        }
+        for item in trace
+    ]
+    normalized = {**result, "events": events, "citations": [], "data": {}}
+    if analysis is None:
+        return normalized
+    payload = analysis["result"]
+    data = payload.get("data", {})
+    normalized["data"] = data
+    normalized["citations"] = [
+        evidence
+        for item in successful
+        for evidence in item.get("result", {}).get("evidence", [])
+    ]
+    plan_payload = data.get("plan")
+    if not plan_payload:
+        return normalized
+    snapshot_id = f"snap_{uuid.uuid4().hex[:12]}"
+    metric = data.get("metric", {})
+    query = next(
+        (item for item in payload.get("evidence", []) if item.get("kind") == "query"),
+        None,
+    )
+    knowledge = next(
+        (
+            item.get("result", {}).get("data", {}).get("knowledge_version")
+            for item in successful
+            if item.get("name") == "search_metric_docs"
+        ),
+        "unknown",
+    )
+    snapshot = AnalysisSnapshot(
+        snapshot_id=snapshot_id,
+        created_at=datetime.now(UTC),
+        question=question,
+        dataset_hashes={
+            name: sha256_file(workspace / f"{name}.csv")
+            for name in ("orders", "stores")
+        },
+        semantic_version=metric.get("version", "unknown"),
+        knowledge_version=knowledge or "unknown",
+        plan=plan_payload,
+        tool_trace_ids=[item["trace_id"] for item in events if item["trace_id"]],
+        sql=query.get("metadata", {}).get("sql") if query else None,
+        result_hash=data.get("result_hash"),
+        verification=data.get("verification", {}),
+        replay_level="strong",
+    )
+    SnapshotStore(output_dir / "snapshots").save(snapshot)
+    normalized["snapshot_id"] = snapshot_id
+    return normalized
+
+
 class DesktopApp:
     """Single-user application service used by the Streamlit shell."""
 
@@ -130,66 +197,7 @@ class DesktopApp:
         return self._mock_graph().resume(thread_id, value)
 
     def _normalize_live(self, question: str, result: dict[str, Any]) -> dict[str, Any]:
-        trace = result.get("tool_trace", [])
-        successful = [item for item in trace if item.get("result", {}).get("ok")]
-        analysis = next((item for item in successful if item.get("name") == "run_analysis"), None)
-        events = [
-            {
-                "tool": item.get("name"),
-                "trace_id": item.get("result", {}).get("trace_id", ""),
-                "ok": item.get("result", {}).get("ok", False),
-                "label": item.get("name", "tool"),
-            }
-            for item in trace
-        ]
-        normalized = {**result, "events": events, "citations": [], "data": {}}
-        if analysis is None:
-            return normalized
-        payload = analysis["result"]
-        data = payload.get("data", {})
-        normalized["data"] = data
-        normalized["citations"] = [
-            evidence
-            for item in successful
-            for evidence in item.get("result", {}).get("evidence", [])
-        ]
-        plan_payload = data.get("plan")
-        if not plan_payload:
-            return normalized
-        snapshot_id = f"snap_{uuid.uuid4().hex[:12]}"
-        metric = data.get("metric", {})
-        query = next(
-            (item for item in payload.get("evidence", []) if item.get("kind") == "query"),
-            None,
-        )
-        knowledge = next(
-            (
-                item.get("result", {}).get("data", {}).get("knowledge_version")
-                for item in successful
-                if item.get("name") == "search_metric_docs"
-            ),
-            "unknown",
-        )
-        snapshot = AnalysisSnapshot(
-            snapshot_id=snapshot_id,
-            created_at=datetime.now(UTC),
-            question=question,
-            dataset_hashes={
-                name: sha256_file(self.workspace / f"{name}.csv")
-                for name in ("orders", "stores")
-            },
-            semantic_version=metric.get("version", "unknown"),
-            knowledge_version=knowledge or "unknown",
-            plan=plan_payload,
-            tool_trace_ids=[item["trace_id"] for item in events if item["trace_id"]],
-            sql=query.get("metadata", {}).get("sql") if query else None,
-            result_hash=data.get("result_hash"),
-            verification=data.get("verification", {}),
-            replay_level="strong",
-        )
-        SnapshotStore(self.output / "snapshots").save(snapshot)
-        normalized["snapshot_id"] = snapshot_id
-        return normalized
+        return normalize_live_result(question, result, self.workspace, self.output)
 
     def replay(self, snapshot_id: str) -> dict[str, Any]:
         from datapilot_verify.app import build_registry

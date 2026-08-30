@@ -12,13 +12,27 @@ from datapilot_verify.agent import build_graph, build_live_tool_loop
 from datapilot_verify.app import build_registry
 from datapilot_verify.config import get_settings
 from datapilot_verify.tools import ToolContext
+from webapp.desktop import normalize_live_result
 
 ROOT = Path(__file__).resolve().parents[1]
 API_WORKSPACE = ROOT / "artifacts" / "api-workspace"
 API_OUTPUT = ROOT / "artifacts" / "api-output"
 API_WORKSPACE.mkdir(parents=True, exist_ok=True)
 API_OUTPUT.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_sample_workspace() -> None:
+    # API 的分析、上传、证据、重放统一使用 api-workspace 数据面；
+    # 无数据时用内置样例补齐，保证首次请求即可运行（BUG-023）。
+    for name in ("orders.csv", "stores.csv"):
+        target = API_WORKSPACE / name
+        if not target.is_file():
+            shutil.copy2(ROOT / "data" / "sample" / name, target)
+
+
+_ensure_sample_workspace()
 GRAPH = build_graph(ROOT)
+GRAPH.context = ToolContext("api", API_WORKSPACE, API_OUTPUT)
 REGISTRY = build_registry(ROOT)
 app = FastAPI(title="DataPilot Verify API", version="0.1.0")
 
@@ -34,7 +48,7 @@ class SnapshotRequest(BaseModel):
 
 
 def _context() -> ToolContext:
-    return ToolContext("api", GRAPH.context.workspace, GRAPH.context.output_dir)
+    return ToolContext("api", API_WORKSPACE, API_OUTPUT)
 
 
 @app.get("/api/health")
@@ -64,8 +78,12 @@ def agent(request: AnalyzeRequest) -> dict:
         model=settings.llm_model,
         base_url=settings.llm_base_url,
         max_steps=settings.max_tool_steps,
+        workspace=API_WORKSPACE,
+        output_dir=API_OUTPUT,
     )
-    return loop.run(request.question)
+    return normalize_live_result(
+        request.question, loop.run(request.question), API_WORKSPACE, API_OUTPUT
+    )
 
 
 @app.post("/api/evidence")

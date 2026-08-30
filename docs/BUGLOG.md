@@ -23,6 +23,7 @@
 | BUG-019 | 2026-08-30 | OpenAIModelAdapter / ModelToolLoop | P2 | 已修复 | Responses 循环步数用尽不总结，浪费已执行结果 | [BUG-019](bugs/BUG-019-responses-loop-no-finalize.md) |
 | BUG-020 | 2026-08-30 | DesktopApp / Streamlit | P2 | 已修复 | 每次分析/重渲染重建链路、重复 profile 与导出 | [BUG-020](bugs/BUG-020-desktop-redundant-work.md) |
 | BUG-022 | 2026-08-30 | LangGraph / OfflineAgent | P2 | 已修复 | 路由关键词优先级不当，混合问题与门店表检查错误 | [BUG-022](bugs/BUG-022-mock-routing-keywords.md) |
+| BUG-023 | 2026-08-30 | webapp/api.py | P2 | 已修复 | API 各端点数据面不一致，上传数据集无法被分析 | [BUG-023](bugs/BUG-023-api-data-plane-inconsistency.md) |
 
 ## 记录规则
 
