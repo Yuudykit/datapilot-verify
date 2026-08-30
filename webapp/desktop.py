@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shutil
 import uuid
 from datetime import UTC, datetime
@@ -13,6 +14,12 @@ from datapilot_verify.domain.models import AnalysisSnapshot
 from datapilot_verify.evidence import SnapshotStore, sha256_file
 from datapilot_verify.tools import ToolContext
 
+_SNAPSHOT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{3,100}$")
+
+
+def _valid_snapshot_id(snapshot_id: str) -> bool:
+    return bool(_SNAPSHOT_ID_PATTERN.match(snapshot_id))
+
 
 class DesktopApp:
     """Single-user application service used by the Streamlit shell."""
@@ -25,6 +32,17 @@ class DesktopApp:
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.output.mkdir(parents=True, exist_ok=True)
         self._ensure_sample_workspace()
+        self._graph: Any | None = None
+        self._datasets_cache: tuple[tuple, list[dict[str, Any]]] | None = None
+
+    def _mock_graph(self) -> Any:
+        # 复用同一 LangGraph 实例（含 checkpointer 连接）：每次点击都重建
+        # registry/检索器/checkpointer 是纯浪费（BUG-020）。
+        if self._graph is None:
+            graph = build_graph(self.project_root)
+            graph.context = ToolContext("desktop", self.workspace, self.output)
+            self._graph = graph
+        return self._graph
 
     def _ensure_sample_workspace(self) -> None:
         for name in ("orders.csv", "stores.csv"):
@@ -33,8 +51,17 @@ class DesktopApp:
                 shutil.copy2(self.project_root / "data" / "sample" / name, target)
 
     def datasets(self) -> list[dict[str, Any]]:
+        names = sorted(self._files())
+        signature = tuple(
+            (name, (self.workspace / name).stat().st_mtime_ns, (self.workspace / name).stat().st_size)
+            for name in names
+        )
+        if self._datasets_cache is not None and self._datasets_cache[0] == signature:
+            return self._datasets_cache[1]
         catalog = DatasetCatalog(self.workspace)
-        return [catalog.profile(path).model_dump(mode="json") for path in sorted(self._files())]
+        profiles = [catalog.profile(name).model_dump(mode="json") for name in names]
+        self._datasets_cache = (signature, profiles)
+        return profiles
 
     def _files(self) -> list[str]:
         return [
@@ -95,15 +122,12 @@ class DesktopApp:
                 output_dir=self.output,
             )
             return self._normalize_live(question, loop.run(question))
-        graph = build_graph(self.project_root)
-        graph.context = ToolContext("desktop", self.workspace, self.output)
+        graph = self._mock_graph()
         return graph.invoke(question, metric_choice=metric_choice)
 
     def resume(self, thread_id: str, value: str) -> dict[str, Any]:
         """按澄清线程继续执行（mock 模式的口径确认走这条链路）。"""
-        graph = build_graph(self.project_root)
-        graph.context = ToolContext("desktop", self.workspace, self.output)
-        return graph.resume(thread_id, value)
+        return self._mock_graph().resume(thread_id, value)
 
     def _normalize_live(self, question: str, result: dict[str, Any]) -> dict[str, Any]:
         trace = result.get("tool_trace", [])
@@ -175,6 +199,12 @@ class DesktopApp:
         ).model_dump(mode="json")
 
     def report(self, snapshot_id: str) -> Path:
+        # 快照 ID 只会指向一次性导出的报告，已存在时直接复用，避免每次
+        # 页面重渲染都重新导出（BUG-020）。
+        if _valid_snapshot_id(snapshot_id):
+            cached = self.output / "reports" / f"report_{snapshot_id}.md"
+            if cached.is_file():
+                return cached
         from datapilot_verify.app import build_registry
 
         result = build_registry(self.project_root).execute(

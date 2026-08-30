@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from datapilot_verify.data.catalog import DatasetCatalog
 from datapilot_verify.domain.models import AnalysisPlan
 from webapp.desktop import DesktopApp
 
@@ -123,3 +124,51 @@ def test_normalize_live_result_creates_snapshot(desktop: DesktopApp) -> None:
     )
     assert result["snapshot_id"].startswith("snap_")
     assert len(list((desktop.output / "snapshots").glob("*.json"))) == 1
+
+
+def test_datasets_profile_is_cached_until_files_change(
+    desktop: DesktopApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = {"count": 0}
+    original = DatasetCatalog.profile
+
+    def counting_profile(self: object, path: str) -> object:
+        calls["count"] += 1
+        return original(self, path)
+
+    monkeypatch.setattr(
+        "datapilot_verify.data.catalog.DatasetCatalog.profile", counting_profile
+    )
+    desktop.datasets()
+    after_first = calls["count"]
+    desktop.datasets()
+    assert calls["count"] == after_first
+    desktop.upload(
+        "orders.csv",
+        b"order_id,paid_at,store_id,category,channel,paid_amount,refund_amount\n"
+        b"o-1,2025-07-01,s-1,food,online,10,0\n",
+        "orders",
+    )
+    desktop.datasets()
+    assert calls["count"] > after_first
+
+
+def test_report_export_reuses_existing_file(
+    desktop: DesktopApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import datapilot_verify.app as app_module
+
+    result = desktop.analyze("7 月净销售额为什么下降？")
+    snapshot_id = result["snapshot_id"]
+    calls = {"count": 0}
+    real_builder = app_module.build_registry
+
+    def counting_builder(root: Path) -> object:
+        calls["count"] += 1
+        return real_builder(root)
+
+    monkeypatch.setattr(app_module, "build_registry", counting_builder)
+    first_path = desktop.report(snapshot_id)
+    assert calls["count"] == 1
+    assert desktop.report(snapshot_id) == first_path
+    assert calls["count"] == 1

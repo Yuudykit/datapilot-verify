@@ -21,6 +21,7 @@
 | BUG-018 | 2026-08-30 | DesktopApp | P2 | 已修复 | live 缺 API Key 时静默降级 mock | [BUG-018](bugs/BUG-018-live-missing-key-silent-mock.md) |
 | BUG-017 | 2026-08-30 | LangGraph / OfflineAgent | P1 | 已修复 | 对比期间硬编码，问题中的月份被忽略 | [BUG-017](bugs/BUG-017-hardcoded-comparison-periods.md) |
 | BUG-019 | 2026-08-30 | OpenAIModelAdapter / ModelToolLoop | P2 | 已修复 | Responses 循环步数用尽不总结，浪费已执行结果 | [BUG-019](bugs/BUG-019-responses-loop-no-finalize.md) |
+| BUG-020 | 2026-08-30 | DesktopApp / Streamlit | P2 | 已修复 | 每次分析/重渲染重建链路、重复 profile 与导出 | [BUG-020](bugs/BUG-020-desktop-redundant-work.md) |
 
 ## 记录规则
 
