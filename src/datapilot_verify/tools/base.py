@@ -154,7 +154,13 @@ class ToolRegistry:
                 error=ToolError(
                     code=ErrorCode.BAD_PARAMS,
                     message="tool arguments failed validation",
-                    details={"errors": exc.errors(include_url=False)},
+                    # include_context=False：ctx 里是异常实例（如 ValueError），
+                    # 会破坏 model_dump(mode="json") 的序列化（BUG-026）。
+                    details={
+                        "errors": exc.errors(
+                            include_url=False, include_context=False
+                        )
+                    },
                 ),
                 trace_id=trace_id,
             )
