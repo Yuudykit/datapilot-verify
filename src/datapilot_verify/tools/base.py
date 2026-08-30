@@ -159,11 +159,12 @@ class ToolRegistry:
                 trace_id=trace_id,
             )
         except Exception as exc:  # Tool boundary must normalize implementation failures.
+            # 异常细节必须保留：这是模型自纠（以及排障）的唯一线索。
             return ToolResult(
                 ok=False,
                 error=ToolError(
                     code=ErrorCode.INTERNAL,
-                    message=f"tool execution failed: {type(exc).__name__}",
+                    message=f"tool execution failed: {type(exc).__name__}: {exc}",
                 ),
                 trace_id=trace_id,
             )

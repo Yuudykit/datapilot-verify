@@ -30,6 +30,14 @@ def test_allows_data_analysis_code() -> None:
             "import pandas as pd\npd.read_pickle(input_csv)",
             None,
         ),
+        (
+            "import pandas as pd\npd.read_csv(str(input_csv))",
+            None,
+        ),
+        (
+            "import pandas as pd\npd.read_csv(str(some_other_path))",
+            "injected input_csv",
+        ),
     ],
 )
 def test_blocks_unsafe_code(code: str, message: str | None) -> None:

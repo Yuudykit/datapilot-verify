@@ -26,6 +26,7 @@
 | BUG-023 | 2026-08-30 | webapp/api.py | P2 | 已修复 | API 各端点数据面不一致，上传数据集无法被分析 | [BUG-023](bugs/BUG-023-api-data-plane-inconsistency.md) |
 | BUG-021 | 2026-08-30 | sandbox/policy.py | P2 | 已修复 | getattr/read_* URL/to_csv 等策略绕过口 | [BUG-021](bugs/BUG-021-sandbox-policy-gaps.md) |
 | BUG-024 | 2026-08-30 | 快照工具 / lint / 文档 | P3 | 已修复 | 快照错误码含糊、.tmp 残留、lint 债务、README 漂移 | [BUG-024](bugs/BUG-024-engineering-hygiene.md) |
+| BUG-025 | 2026-08-30 | live Agent（提示词/错误边界/沙箱） | P1 | 已修复 | 工具预算浪费、失败无细节无法自纠，分析问题无数值结论 | [BUG-025](bugs/BUG-025-live-agent-tool-budget-waste.md) |
 
 ## 记录规则
 

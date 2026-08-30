@@ -32,7 +32,9 @@ class ContributionArgs(BaseModel):
     name="run_python_analysis",
     description=(
         "Run a long-tail analysis in the restricted Python worker, with at most two "
-        "supplied repair attempts."
+        "supplied repair attempts. input_csv is the dataset file path, not a DataFrame: "
+        "read it exactly as pd.read_csv(input_csv), then compute and assign the final "
+        "result to a variable named result."
     ),
     args_model=PythonAnalysisArgs,
     stage="analysis",

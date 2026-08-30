@@ -15,6 +15,11 @@ def echo(*, args: EchoArgs, context: ToolContext, trace_id: str) -> ToolResult:
     return ToolResult(ok=True, data={"value": args.value}, trace_id=trace_id)
 
 
+@tool(name="boom", description="Always raises", args_model=EchoArgs, stage="test")
+def boom(*, args: EchoArgs, context: ToolContext, trace_id: str) -> ToolResult:
+    raise ValueError("sort field is not available: x")
+
+
 def context(tmp_path: Path) -> ToolContext:
     return ToolContext(session_id="test", workspace=tmp_path, output_dir=tmp_path)
 
@@ -43,6 +48,17 @@ def test_registry_normalizes_bad_arguments(tmp_path) -> None:
     assert not result.ok
     assert result.error is not None
     assert result.error.code == "BAD_PARAMS"
+
+
+def test_registry_internal_error_keeps_exception_detail(tmp_path) -> None:
+    # 模型自纠依赖失败原因：INTERNAL 报错必须携带底层异常信息（BUG-025）。
+    registry = ToolRegistry()
+    registry.register(boom)
+    result = registry.execute("boom", {"value": "x"}, context(tmp_path))
+    assert not result.ok
+    assert result.error is not None
+    assert result.error.code == "INTERNAL"
+    assert "sort field is not available: x" in result.error.message
 
 
 def test_registry_adapts_tools_for_langgraph_toolnode(tmp_path) -> None:

@@ -73,13 +73,28 @@ class PythonPolicy:
                     raise ValueError(f"blocked Python attribute: {node.attr}")
             elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 if node.func.attr.startswith(self.DATA_READER_PREFIXES):
-                    if not node.args or not isinstance(node.args[0], ast.Name):
-                        raise ValueError("data readers must use the injected input_csv variable")
-                    if node.args[0].id != "input_csv":
-                        raise ValueError("data readers must use the injected input_csv variable")
+                    if not node.args or not self._is_input_csv(node.args[0]):
+                        raise ValueError(
+                            "data readers must use the injected input_csv variable"
+                        )
             elif isinstance(node, ast.Name) and node.id.startswith("__"):
                 raise ValueError(f"blocked Python name: {node.id}")
         return tree
+
+    @staticmethod
+    def _is_input_csv(node: ast.expr) -> bool:
+        """允许 `input_csv` 或 `str(input_csv)`；其他路径一律拒绝。"""
+        if isinstance(node, ast.Name):
+            return node.id == "input_csv"
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "str"
+            and len(node.args) == 1
+            and isinstance(node.args[0], ast.Name)
+        ):
+            return node.args[0].id == "input_csv"
+        return False
 
     def _validate_import(self, module: str) -> None:
         root = module.split(".", 1)[0]
