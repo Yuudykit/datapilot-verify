@@ -1,0 +1,45 @@
+# DataPilot Verify - complete direct dependency set
+# Python 3.11; install into D:\agent-gpt\.conda-env
+
+# Core (already installed in the current environment)
+duckdb==1.5.5
+numpy==2.4.6
+pandas==3.0.5
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-dotenv==1.2.3
+PyYAML==6.0.3
+rank-bm25==0.2.2
+sqlglot==30.17.0
+
+# Agent and live LLM
+httpx==0.28.1
+langgraph==1.2.11
+langgraph-checkpoint-sqlite>=2.0
+openai==3.6.0
+
+# API and presentation UI
+fastapi==0.141.1
+openpyxl==3.1.5
+plotly==7.0.0
+python-multipart==0.0.32
+streamlit==1.62.0
+uvicorn==0.52.4
+
+# Long-tail analysis and data quality
+pandera==0.32.1
+polars==1.44.1
+pyarrow==25.0.1
+scikit-learn==1.9.0
+scipy==1.17.1
+
+# Observability
+opentelemetry-api>=1.30
+opentelemetry-sdk>=1.30
+
+# Test and quality
+hypothesis==6.167.0
+pytest==9.1.1
+pytest-cov==7.1.0
+ruff==0.16.5
+

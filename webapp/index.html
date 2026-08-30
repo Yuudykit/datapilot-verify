@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataPilot Verify</title>
+  <style>
+    :root { --ink:#17202a; --muted:#65717d; --line:#dce2e8; --soft:#f5f7f9; --accent:#176b5b; --down:#b23a48; --up:#217a53; --warn:#a46712; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif; color:var(--ink); background:#fff; }
+    header { height:58px; display:flex; align-items:center; justify-content:space-between; padding:0 22px; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:baseline; gap:10px; }
+    .brand h1 { margin:0; font-size:18px; letter-spacing:.2px; }
+    .brand span,.muted { color:var(--muted); font-size:12px; }
+    .mode { font-size:12px; padding:5px 9px; border:1px solid #b8d7ce; color:var(--accent); background:#f2faf7; border-radius:999px; }
+    main { display:grid; grid-template-columns:270px minmax(360px,1fr) minmax(440px,1.35fr); height:calc(100vh - 58px); }
+    section { min-width:0; padding:18px; overflow:auto; border-right:1px solid var(--line); }
+    section:last-child { border-right:0; }
+    h2 { font-size:13px; margin:0 0 14px; text-transform:uppercase; letter-spacing:.08em; color:#46515c; }
+    h3 { font-size:14px; margin:22px 0 9px; }
+    .dataset { padding:11px 0; border-top:1px solid var(--line); }
+    .dataset strong { display:block; font-size:13px; margin-bottom:3px; }
+    .metric-def { border-left:3px solid var(--accent); padding:3px 0 3px 11px; line-height:1.55; font-size:13px; }
+    .question { display:flex; gap:8px; }
+    input { width:100%; padding:11px 12px; border:1px solid #b7c0c8; border-radius:5px; font:inherit; }
+    button { padding:10px 14px; border:0; border-radius:5px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; white-space:nowrap; }
+    button.secondary { color:var(--accent); background:#fff; border:1px solid var(--accent); }
+    button:disabled { opacity:.55; cursor:wait; }
+    .timeline { margin:18px 0 0; padding:0; list-style:none; }
+    .event { display:grid; grid-template-columns:18px 1fr auto; gap:9px; padding:9px 0; border-bottom:1px solid #edf0f2; font-size:13px; }
+    .dot { width:9px; height:9px; border-radius:50%; background:var(--up); margin-top:4px; }
+    .trace { color:var(--muted); font-family:Consolas,monospace; font-size:10px; }
+    .clarify { display:none; margin-top:14px; padding:12px; background:#fff8eb; border:1px solid #e8c98e; border-radius:5px; }
+    .result-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+    .result-head h2 { margin-bottom:7px; }
+    .answer { font-size:17px; line-height:1.65; max-width:760px; }
+    .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin:18px 0; background:var(--line); border:1px solid var(--line); }
+    .kpi { background:#fff; padding:13px; }
+    .kpi label { color:var(--muted); font-size:11px; display:block; margin-bottom:7px; }
+    .kpi strong { font-size:20px; }
+    .bars { margin-top:10px; }
+    .bar-row { display:grid; grid-template-columns:45px 1fr 90px; gap:10px; align-items:center; margin:10px 0; font-size:12px; }
+    .bar-track { height:14px; background:#edf0f2; position:relative; }
+    .bar { height:100%; background:var(--down); }
+    .bar.up { background:var(--up); }
+    table { width:100%; border-collapse:collapse; font-size:12px; margin-top:15px; }
+    th,td { text-align:right; padding:8px 7px; border-bottom:1px solid #e6eaed; }
+    th:first-child,td:first-child { text-align:left; }
+    .negative { color:var(--down); } .positive { color:var(--up); }
+    .evidence-link { color:var(--accent); text-decoration:underline; cursor:pointer; }
+    dialog { width:min(700px,90vw); border:1px solid var(--line); border-radius:7px; padding:0; box-shadow:0 18px 60px #0003; }
+    dialog::backdrop { background:#17202a66; }
+    .drawer-head { display:flex; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--line); }
+    .drawer-body { padding:18px; max-height:65vh; overflow:auto; }
+    pre { font-size:11px; white-space:pre-wrap; word-break:break-word; background:var(--soft); padding:12px; border-radius:4px; }
+    .empty { color:var(--muted); font-size:13px; padding:24px 0; }
+    @media(max-width:1050px){ main{grid-template-columns:220px 1fr;} .results{grid-column:1/-1;border-top:1px solid var(--line);} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><h1>DataPilot Verify</h1><span>可信经营分析工作台</span></div>
+    <div class="mode">离线模型 · 真实 Tool 执行</div>
+  </header>
+  <main>
+    <section>
+      <h2>数据与知识</h2>
+      <div class="dataset"><strong>orders.csv</strong><span class="muted">3,123 行 · 2026-06-01 至 2026-07-31</span></div>
+      <div class="dataset"><strong>stores.csv</strong><span class="muted">11 家门店 · 4 个区域</span></div>
+      <h3>当前指标</h3>
+      <div class="metric-def"><strong>净销售额 v1.1</strong><br>支付金额 − 退款金额<br><span class="muted">粒度：order_id · 负责人：finance</span></div>
+      <h3>知识版本</h3>
+      <div class="muted">语义层：2026.08.1<br>文档库：核心口径 + 变更记录</div>
+    </section>
+    <section>
+      <h2>问题与 Tool 时间线</h2>
+      <div class="question"><input id="question" value="7 月净销售额为什么下降？"><button id="run">分析</button></div>
+      <div id="clarify" class="clarify"><strong>需要确认口径</strong><p>“销售额”指净销售额还是支付金额？</p><button id="choose">采用净销售额</button></div>
+      <ul id="timeline" class="timeline"><li class="empty">提交问题后，这里展示真实 Tool 调用，不展示模型思维链。</li></ul>
+    </section>
+    <section class="results">
+      <div class="result-head"><div><h2>已验证结论</h2><div id="answer" class="answer">等待分析。</div></div><button id="evidenceBtn" class="secondary" disabled>查看证据</button></div>
+      <div id="resultBody" style="display:none">
+        <div class="kpis"><div class="kpi"><label id="metricLabel">当前指标</label><strong id="current">—</strong></div><div class="kpi"><label>较上期变化</label><strong id="change" class="negative">—</strong></div><div class="kpi"><label>数值校验</label><strong id="verified">—</strong></div></div>
+        <h3>区域下降贡献</h3><div id="bars" class="bars"></div>
+        <table><thead><tr><th>区域</th><th>6 月</th><th>7 月</th><th>变化额</th><th>变化率</th><th>下降贡献</th></tr></thead><tbody id="rows"></tbody></table>
+        <p class="muted">“贡献”是指标变化的算术拆解，不代表因果关系。</p>
+      </div>
+    </section>
+  </main>
+  <dialog id="evidence"><div class="drawer-head"><strong>结论证据</strong><button id="close" class="secondary">关闭</button></div><div class="drawer-body"><div id="citations"></div><h3>计划、结果与校验</h3><pre id="raw"></pre></div></dialog>
+  <script>
+    const q=document.querySelector('#question'),run=document.querySelector('#run'),timeline=document.querySelector('#timeline'),clarify=document.querySelector('#clarify');
+    let last=null;
+    async function analyze(metric_choice=null){run.disabled=true;timeline.innerHTML='<li class="empty">正在执行领域 Tool…</li>';try{const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q.value,metric_choice,thread_id:last?.thread_id})});last=await res.json();render(last);}catch(e){document.querySelector('#answer').textContent='请求失败：'+e.message;}finally{run.disabled=false;}}
+    function money(v){return new Intl.NumberFormat('zh-CN',{maximumFractionDigits:2}).format(v)+' 元'}
+    function value(v,unit){return unit==='ratio'?new Intl.NumberFormat('zh-CN',{style:'percent',maximumFractionDigits:1}).format(v):money(v)}
+    function render(x){if(x.status==='clarification'){clarify.style.display='block';timeline.innerHTML='<li class="empty">工作流已暂停，等待用户确认。</li>';return;}clarify.style.display='none';document.querySelector('#answer').textContent=x.answer;timeline.innerHTML=(x.events||[]).map(e=>'<li class="event"><span class="dot"></span><span><strong>'+e.label+'</strong><br><span class="muted">'+e.tool+'</span></span><span class="trace">'+e.trace_id+'</span></li>').join('');const rows=x.data?.rows||[];if(!rows.length){document.querySelector('#resultBody').style.display='none';return;}document.querySelector('#resultBody').style.display='block';const metric=x.data?.metric?.name||'当前指标',unit=x.data?.metric?.unit||'',overall=x.data?.overall||{};document.querySelector('#metricLabel').textContent='7 月'+metric;document.querySelector('#current').textContent=value(overall.current_value??rows.reduce((a,r)=>a+r.current_value,0),unit);document.querySelector('#change').textContent=value(overall.change_amount??rows.reduce((a,r)=>a+r.change_amount,0),unit);document.querySelector('#verified').textContent=x.data.verification?.passed?'通过':'失败';const dimension=Object.keys(rows[0]).find(k=>!['current_value','previous_value','change_amount','change_rate','decline_contribution_rate'].includes(k))||'region';const max=Math.max(...rows.map(r=>Math.abs(r.change_amount)))||1;document.querySelector('#bars').innerHTML=rows.map(r=>'<div class="bar-row"><span>'+r[dimension]+'</span><div class="bar-track"><div class="bar '+(r.change_amount>0?'up':'')+'" style="width:'+(Math.abs(r.change_amount)/max*100)+'%"></div></div><span class="'+(r.change_amount<0?'negative':'positive')+'">'+value(r.change_amount,unit)+'</span></div>').join('');document.querySelector('#rows').innerHTML=rows.map(r=>'<tr><td>'+r[dimension]+'</td><td>'+value(r.previous_value,unit)+'</td><td>'+value(r.current_value,unit)+'</td><td class="'+(r.change_amount<0?'negative':'positive')+'">'+value(r.change_amount,unit)+'</td><td>'+new Intl.NumberFormat('zh-CN',{style:'percent',maximumFractionDigits:1}).format(r.change_rate)+'</td><td>'+new Intl.NumberFormat('zh-CN',{style:'percent',maximumFractionDigits:1}).format(r.decline_contribution_rate||0)+'</td></tr>').join('');document.querySelector('#evidenceBtn').disabled=false;}
+    run.onclick=()=>analyze();document.querySelector('#choose').onclick=()=>analyze('net_sales');document.querySelector('#evidenceBtn').onclick=()=>{document.querySelector('#citations').innerHTML=(last.citations||[]).map(c=>'<p><span class="evidence-link">'+c.label+'</span><br><span class="muted">'+c.source+' · '+(c.locator||c.version||'')+'</span></p>').join('');document.querySelector('#raw').textContent=JSON.stringify({plan:last.data.plan,verification:last.data.verification,snapshot_id:last.snapshot_id},null,2);document.querySelector('#evidence').showModal();};document.querySelector('#close').onclick=()=>document.querySelector('#evidence').close();
+  </script>
+</body>
+</html>

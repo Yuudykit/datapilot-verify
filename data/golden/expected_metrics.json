@@ -1,0 +1,21 @@
+{
+  "seed": 20260830,
+  "row_count": 3123,
+  "file_hashes": {
+    "orders.csv": "8a0feba72b2f0670cee0a1e3d5aaeaa10bf4cf9e1b21c9785f8fe61c4345beee",
+    "stores.csv": "39bd99d9335c0cb9d7e6ddc2b5186f8029cb500c7ea32ebc15e66267229057f2"
+  },
+  "net_sales": {
+    "2026-06": 908631,
+    "2026-07": 798458
+  },
+  "mom_rate": -0.12125164120528575,
+  "change_amount": -110173,
+  "region_changes": {
+    "华东": -113950,
+    "华北": 4992,
+    "华南": 9753,
+    "西南": -10968
+  },
+  "largest_decline_region": "华东"
+}

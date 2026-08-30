@@ -1,0 +1,191 @@
+{
+  "datasets": {
+    "orders": {
+      "dataset_id": "orders",
+      "filename": "orders.csv",
+      "sha256": "8a0feba72b2f0670cee0a1e3d5aaeaa10bf4cf9e1b21c9785f8fe61c4345beee",
+      "row_count": 3123,
+      "columns": [
+        {
+          "name": "order_id",
+          "dtype": "str",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 3123,
+          "sample_values": [
+            "O000001",
+            "O000002",
+            "O000003"
+          ]
+        },
+        {
+          "name": "paid_at",
+          "dtype": "str",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 61,
+          "sample_values": [
+            "2026-06-01",
+            "2026-06-01",
+            "2026-06-01"
+          ]
+        },
+        {
+          "name": "store_id",
+          "dtype": "str",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 11,
+          "sample_values": [
+            "SH-001",
+            "SH-001",
+            "SH-001"
+          ]
+        },
+        {
+          "name": "category",
+          "dtype": "str",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 4,
+          "sample_values": [
+            "食品",
+            "数码",
+            "家居"
+          ]
+        },
+        {
+          "name": "channel",
+          "dtype": "str",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 3,
+          "sample_values": [
+            "小程序",
+            "门店",
+            "小程序"
+          ]
+        },
+        {
+          "name": "paid_amount",
+          "dtype": "int64",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 1040,
+          "sample_values": [
+            187,
+            179,
+            477
+          ]
+        },
+        {
+          "name": "refund_amount",
+          "dtype": "int64",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 238,
+          "sample_values": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "quantity",
+          "dtype": "int64",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 4,
+          "sample_values": [
+            3,
+            3,
+            3
+          ]
+        }
+      ],
+      "time_range": [
+        "2026-06-01",
+        "2026-07-31"
+      ],
+      "warnings": []
+    },
+    "stores": {
+      "dataset_id": "stores",
+      "filename": "stores.csv",
+      "sha256": "39bd99d9335c0cb9d7e6ddc2b5186f8029cb500c7ea32ebc15e66267229057f2",
+      "row_count": 11,
+      "columns": [
+        {
+          "name": "store_id",
+          "dtype": "str",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 11,
+          "sample_values": [
+            "SH-001",
+            "SH-003",
+            "HZ-008"
+          ]
+        },
+        {
+          "name": "region",
+          "dtype": "str",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 4,
+          "sample_values": [
+            "华东",
+            "华东",
+            "华东"
+          ]
+        },
+        {
+          "name": "city",
+          "dtype": "str",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 9,
+          "sample_values": [
+            "上海",
+            "上海",
+            "杭州"
+          ]
+        },
+        {
+          "name": "status",
+          "dtype": "str",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 2,
+          "sample_values": [
+            "正常",
+            "正常",
+            "正常"
+          ]
+        },
+        {
+          "name": "opened_at",
+          "dtype": "str",
+          "nullable": false,
+          "null_count": 0,
+          "distinct_count": 2,
+          "sample_values": [
+            "2023-01-01",
+            "2023-01-01",
+            "2023-01-01"
+          ]
+        }
+      ],
+      "time_range": null,
+      "warnings": []
+    }
+  },
+  "relationships": [
+    {
+      "left_dataset": "orders",
+      "left_column": "store_id",
+      "right_dataset": "stores",
+      "right_column": "store_id"
+    }
+  ]
+}

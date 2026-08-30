@@ -1,0 +1,42 @@
+version: "2026.08.1"
+metrics:
+  net_sales:
+    metric_id: net_sales
+    name: 净销售额
+    aliases: [实收销售额, 净GMV]
+    expression: sum(paid_amount - refund_amount)
+    grain: order_id
+    time_dimension: paid_at
+    allowed_dimensions: [region, city, store_id, category, channel]
+    unit: CNY
+    owner: finance
+    description: 支付金额扣除退款金额后的净额。
+    version: "1.1"
+    effective_from: 2026-01-01
+  refund_rate:
+    metric_id: refund_rate
+    name: 退款率
+    aliases: [退货率, 退款订单占比]
+    expression: sum(case when refund_amount > 0 then 1 else 0 end) / count(distinct order_id)
+    grain: order_id
+    time_dimension: paid_at
+    allowed_dimensions: [region, city, store_id, category, channel]
+    unit: ratio
+    owner: operations
+    description: 发生退款的订单数占支付订单数的比例。
+    version: "1.0"
+    effective_from: 2026-01-01
+  avg_order_value:
+    metric_id: avg_order_value
+    name: 客单价
+    aliases: [AOV, 平均订单金额]
+    expression: sum(paid_amount - refund_amount) / count(distinct order_id)
+    grain: order_id
+    time_dimension: paid_at
+    allowed_dimensions: [region, city, store_id, category, channel]
+    unit: CNY/order
+    owner: operations
+    description: 每笔支付订单贡献的平均净销售额。
+    version: "1.0"
+    effective_from: 2026-01-01
+

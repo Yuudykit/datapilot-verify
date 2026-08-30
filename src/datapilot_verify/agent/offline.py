@@ -1,0 +1,171 @@
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from datapilot_verify.app import build_registry
+from datapilot_verify.domain.models import AnalysisPlan, AnalysisSnapshot, ComparisonSpec, SortSpec
+from datapilot_verify.evidence import SnapshotStore, sha256_file
+from datapilot_verify.tools import ToolContext
+
+
+@dataclass(frozen=True)
+class AgentEvent:
+    tool: str
+    trace_id: str
+    ok: bool
+    label: str
+
+
+@dataclass(frozen=True)
+class AgentResponse:
+    status: str
+    answer: str
+    events: list[AgentEvent] = field(default_factory=list)
+    data: dict[str, Any] = field(default_factory=dict)
+    citations: list[dict[str, Any]] = field(default_factory=list)
+    snapshot_id: str | None = None
+    clarification: dict[str, Any] | None = None
+
+
+class OfflineAgent:
+    """Scripted model adapter; all tools and calculations remain real."""
+
+    def __init__(self, project_root: Path) -> None:
+        self.project_root = project_root.resolve()
+        self.registry = build_registry(self.project_root)
+        self.context = ToolContext(
+            session_id="offline-demo",
+            workspace=self.project_root / "data" / "sample",
+            output_dir=self.project_root / "artifacts" / "offline-demo",
+        )
+        self.context.output_dir.mkdir(parents=True, exist_ok=True)
+        self.snapshots = SnapshotStore(self.context.output_dir / "snapshots")
+
+    def ask(self, question: str, metric_choice: str | None = None) -> AgentResponse:
+        normalized = question.strip()
+        if not normalized:
+            return AgentResponse(status="error", answer="问题不能为空。")
+        if "销售额" in normalized and "净销售额" not in normalized and metric_choice is None:
+            return AgentResponse(
+                status="clarification",
+                answer="“销售额”存在多个口径，请先确认本次分析采用哪个指标。",
+                clarification={
+                    "field": "metric",
+                    "options": [
+                        {"value": "net_sales", "label": "净销售额（扣除退款）"},
+                        {"value": "gross_sales", "label": "支付金额（不扣退款）"},
+                    ],
+                },
+            )
+        if any(term in normalized for term in ("字段", "多少行", "数据质量")):
+            result = self.registry.execute(
+                "inspect_dataset", {"path": "orders.csv"}, self.context, allowed={"inspect_dataset"}
+            )
+            return AgentResponse(
+                status="completed" if result.ok else "error",
+                answer=f"订单数据共 {result.data.get('profile', {}).get('row_count', 0):,} 行。",
+                events=[AgentEvent("inspect_dataset", result.trace_id, result.ok, "检查数据")],
+                data=result.data,
+                citations=[item.model_dump(mode="json") for item in result.evidence],
+            )
+        if any(term in normalized for term in ("定义", "口径", "包含退款", "扣除退款")) and "下降" not in normalized:
+            metric = self.registry.execute("resolve_metric", {"query": normalized}, self.context)
+            docs = self.registry.execute("search_metric_docs", {"query": normalized, "top_k": 3}, self.context)
+            matches = metric.data.get("matches", [])
+            description = matches[0]["metric"]["description"] if matches else "没有找到正式指标定义。"
+            return AgentResponse(
+                status="completed",
+                answer=description,
+                events=[
+                    AgentEvent("resolve_metric", metric.trace_id, metric.ok, "解析指标"),
+                    AgentEvent("search_metric_docs", docs.trace_id, docs.ok, "检索口径文档"),
+                ],
+                data={"metric": matches[0] if matches else None, "documents": docs.data.get("results", [])},
+                citations=[item.model_dump(mode="json") for item in docs.evidence],
+            )
+        return self._run_decline_analysis(normalized, metric_choice or "net_sales")
+
+    def _run_decline_analysis(self, question: str, metric_id: str) -> AgentResponse:
+        metric_id = self._infer_metric(question, metric_id)
+        dimension = self._infer_dimension(question)
+        metric = self.registry.execute("resolve_metric", {"query": metric_id}, self.context)
+        docs = self.registry.execute(
+            "search_metric_docs", {"query": "净销售额扣除退款及历史口径", "top_k": 3}, self.context
+        )
+        plan = AnalysisPlan(
+            plan_id=f"plan_{uuid.uuid4().hex[:10]}",
+            dataset_ids=["orders", "stores"],
+            metric=metric_id,
+            dimensions=[dimension],
+            comparison=ComparisonSpec(
+                type="mom",
+                current_period=(date(2026, 7, 1), date(2026, 7, 31)),
+                previous_period=(date(2026, 6, 1), date(2026, 6, 30)),
+            ),
+            analysis="contribution",
+            sort=[SortSpec(field="change_amount", direction="asc")],
+            question=question,
+        )
+        analysis = self.registry.execute("run_analysis", {"plan": plan.model_dump(mode="json")}, self.context)
+        rows = analysis.data.get("rows", [])
+        top = rows[0] if rows else {}
+        answer = (
+            f"7 月{metric.data.get('matches', [{}])[0].get('metric', {}).get('name', metric_id)}为 "
+            f"{sum(row['current_value'] for row in rows):,.2f}，较 6 月变化 "
+            f"{sum(row['change_amount'] for row in rows):,.2f}。"
+            f"{top.get(dimension, '首要分组')}贡献了全部变化项的 "
+            f"{top.get('decline_contribution_rate', 0):.1%}，是最主要的可观察贡献因素。"
+        )
+        snapshot_id = f"snap_{uuid.uuid4().hex[:12]}"
+        snapshot = AnalysisSnapshot(
+            snapshot_id=snapshot_id,
+            created_at=datetime.now(timezone.utc),
+            question=question,
+            dataset_hashes={
+                "orders": sha256_file(self.context.workspace / "orders.csv"),
+                "stores": sha256_file(self.context.workspace / "stores.csv"),
+            },
+            semantic_version=analysis.data.get("metric", {}).get("version", "unknown"),
+            knowledge_version=docs.data.get("knowledge_version", "unknown"),
+            plan=plan,
+            tool_trace_ids=[metric.trace_id, docs.trace_id, analysis.trace_id],
+            result_hash=analysis.data.get("result_hash"),
+            verification=analysis.data.get("verification", {}),
+            replay_level="strong",
+        )
+        self.snapshots.save(snapshot)
+        citations = [item.model_dump(mode="json") for item in docs.evidence + analysis.evidence]
+        return AgentResponse(
+            status="completed" if analysis.ok else "error",
+            answer=answer,
+            events=[
+                AgentEvent("resolve_metric", metric.trace_id, metric.ok, "解析指标"),
+                AgentEvent("search_metric_docs", docs.trace_id, docs.ok, "检索业务文档"),
+                AgentEvent("run_analysis", analysis.trace_id, analysis.ok, "执行并验证分析"),
+            ],
+            data={"plan": plan.model_dump(mode="json"), "rows": rows, "verification": analysis.data.get("verification")},
+            citations=citations,
+            snapshot_id=snapshot_id,
+        )
+
+    @staticmethod
+    def _infer_metric(question: str, fallback: str) -> str:
+        if "退款率" in question or "退货率" in question:
+            return "refund_rate"
+        if "客单价" in question or "平均订单" in question:
+            return "avg_order_value"
+        return fallback if fallback in {"net_sales", "refund_rate", "avg_order_value"} else "net_sales"
+
+    @staticmethod
+    def _infer_dimension(question: str) -> str:
+        for term, dimension in (
+            (("渠道",), "channel"), (("品类", "类别"), "category"),
+            (("城市",), "city"), (("门店",), "store_id"),
+        ):
+            if any(item in question for item in term):
+                return dimension
+        return "region"
