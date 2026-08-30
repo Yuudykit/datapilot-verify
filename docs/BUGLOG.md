@@ -14,6 +14,7 @@
 | BUG-010 | 2026-08-30 | Streamlit | P1 | 已修复 | 页面配置晚于资源初始化，可能阻止界面启动 | [BUG-010](bugs/BUG-010-streamlit-page-config-order.md) |
 | BUG-011 | 2026-08-30 | Python Worker | P2 | 已修复 | Windows 子进程非 UTF-8 输出触发解码异常 | [BUG-011](bugs/BUG-011-python-worker-output-encoding.md) |
 | BUG-012 | 2026-08-30 | Streamlit | P1 | 已修复 | 新请求失败时复用上一条结果，造成答案残留 | [BUG-012](bugs/BUG-012-stale-streamlit-result.md) |
+| BUG-013 | 2026-08-30 | pytest | P1 | 已修复 | 项目内 basetemp 目录 ACL 损坏且清理失败即会话失败 | [BUG-013](bugs/BUG-013-pytest-basetemp-corruption.md) |
 
 ## 记录规则
 
