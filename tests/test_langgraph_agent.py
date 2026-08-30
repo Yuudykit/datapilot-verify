@@ -51,6 +51,22 @@ def test_langgraph_uses_question_months_for_comparison() -> None:
     assert comparison["previous_period"][0] == "2026-05-01"
 
 
+def test_langgraph_prefers_analysis_over_definition_in_mixed_question() -> None:
+    result = build_graph(ROOT).invoke(
+        "净销售额的口径是什么？顺便按渠道看 7 月为什么下降", thread_id="mixed-intent"
+    )
+    assert result["status"] == "completed"
+    tools = [item["tool"] for item in result["events"]]
+    assert "run_analysis" in tools
+
+
+def test_langgraph_inspects_stores_table_when_asked() -> None:
+    result = build_graph(ROOT).invoke("门店维表有多少行？", thread_id="stores-route")
+    assert result["status"] == "completed"
+    assert result["data"]["profile"]["row_count"] == 11
+    assert "store_id" in result["answer"]
+
+
 def test_langgraph_rejects_unrelated_question() -> None:
     result = build_graph(ROOT).invoke("今天天气怎么样", thread_id="unsupported-route")
     assert result["status"] == "unsupported"

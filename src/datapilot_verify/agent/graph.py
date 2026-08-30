@@ -109,20 +109,35 @@ class DataPilotGraph:
         )
         if ambiguous:
             return "clarify_metric"
+        # 分析类意图优先于口径问答：混合问题（"口径是什么？顺便看为什么下降"）
+        # 应当进入完整分析链路，而不是只返回定义文本。
+        analysis_intent = any(
+            term in question for term in ("下降", "上涨", "变化", "比较", "为什么")
+        )
+        if analysis_intent:
+            return "search_docs" if matches else "unsupported"
         if any(term in question for term in ("定义", "口径", "包含退款", "扣除退款")):
             return "answer_metric"
         return "search_docs" if matches else "unsupported"
 
     def _inspect_dataset(self, state: AgentState) -> dict[str, Any]:
+        path = (
+            "stores.csv"
+            if any(term in state["question"] for term in ("门店", "维表"))
+            else "orders.csv"
+        )
         result = self.registry.execute(
-            "inspect_dataset", {"path": "orders.csv"}, self.context, allowed={"inspect_dataset"}
+            "inspect_dataset", {"path": path}, self.context, allowed={"inspect_dataset"}
         )
         profile = result.data.get("profile", {})
         columns = [item.get("name", "") for item in profile.get("columns", [])]
         column_text = "、".join(columns)
         return {
             "status": "completed" if result.ok else "error",
-            "answer": f"订单数据共 {profile.get('row_count', 0):,} 行，字段包括：{column_text}。",
+            "answer": (
+                f"{profile.get('filename', path)} 共 {profile.get('row_count', 0):,} 行，"
+                f"字段包括：{column_text}。"
+            ),
             "events": [*state.get("events", []), _event("inspect_dataset", result, "检查数据")],
             "data": {**state.get("data", {}), **result.data},
             "citations": [x.model_dump(mode="json") for x in result.evidence],

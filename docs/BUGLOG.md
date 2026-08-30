@@ -22,6 +22,7 @@
 | BUG-017 | 2026-08-30 | LangGraph / OfflineAgent | P1 | 已修复 | 对比期间硬编码，问题中的月份被忽略 | [BUG-017](bugs/BUG-017-hardcoded-comparison-periods.md) |
 | BUG-019 | 2026-08-30 | OpenAIModelAdapter / ModelToolLoop | P2 | 已修复 | Responses 循环步数用尽不总结，浪费已执行结果 | [BUG-019](bugs/BUG-019-responses-loop-no-finalize.md) |
 | BUG-020 | 2026-08-30 | DesktopApp / Streamlit | P2 | 已修复 | 每次分析/重渲染重建链路、重复 profile 与导出 | [BUG-020](bugs/BUG-020-desktop-redundant-work.md) |
+| BUG-022 | 2026-08-30 | LangGraph / OfflineAgent | P2 | 已修复 | 路由关键词优先级不当，混合问题与门店表检查错误 | [BUG-022](bugs/BUG-022-mock-routing-keywords.md) |
 
 ## 记录规则
 

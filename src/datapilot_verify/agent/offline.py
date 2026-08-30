@@ -62,17 +62,26 @@ class OfflineAgent:
                 },
             )
         if any(term in normalized for term in ("字段", "多少行", "数据质量")):
-            result = self.registry.execute(
-                "inspect_dataset", {"path": "orders.csv"}, self.context, allowed={"inspect_dataset"}
+            path = (
+                "stores.csv"
+                if any(term in normalized for term in ("门店", "维表"))
+                else "orders.csv"
             )
+            result = self.registry.execute(
+                "inspect_dataset", {"path": path}, self.context, allowed={"inspect_dataset"}
+            )
+            row_count = result.data.get("profile", {}).get("row_count", 0)
             return AgentResponse(
                 status="completed" if result.ok else "error",
-                answer=f"订单数据共 {result.data.get('profile', {}).get('row_count', 0):,} 行。",
+                answer=f"{path} 共 {row_count:,} 行。",
                 events=[AgentEvent("inspect_dataset", result.trace_id, result.ok, "检查数据")],
                 data=result.data,
                 citations=[item.model_dump(mode="json") for item in result.evidence],
             )
-        if any(term in normalized for term in ("定义", "口径", "包含退款", "扣除退款")) and "下降" not in normalized:
+        analysis_intent = any(
+            term in normalized for term in ("下降", "上涨", "变化", "比较", "为什么")
+        )
+        if any(term in normalized for term in ("定义", "口径", "包含退款", "扣除退款")) and not analysis_intent:
             metric = self.registry.execute("resolve_metric", {"query": normalized}, self.context)
             docs = self.registry.execute("search_metric_docs", {"query": normalized, "top_k": 3}, self.context)
             matches = metric.data.get("matches", [])
