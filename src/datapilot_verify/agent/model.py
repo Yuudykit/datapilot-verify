@@ -18,6 +18,11 @@ SYSTEM_PROMPT = (
     "回答应简洁，并区分算术贡献与因果关系。已有足够证据后立即作答，不要重复调用 Tool。"
 )
 
+FINALIZE_PROMPT = (
+    "工具调用额度已用完。请只根据上面的成功 Tool 结果给出简洁结论；"
+    "不得再调用工具，不得补充未被证据支持的数值。"
+)
+
 
 @dataclass(frozen=True)
 class ToolCall:
@@ -111,6 +116,15 @@ class OpenAIModelAdapter:
             response_id=getattr(response, "id", None),
         )
 
+    def finalize(self, inputs: list[dict[str, Any]], previous_response_id: str | None = None) -> str:
+        """步数用尽后的兜底总结：不带 tools 再问一次，只基于已有工具结果作答。"""
+        response = self.client.responses.create(
+            model=self.model,
+            input=[*inputs, {"role": "user", "content": FINALIZE_PROMPT}],
+            previous_response_id=previous_response_id,
+        )
+        return getattr(response, "output_text", "") or ""
+
     def execute_calls(
         self,
         turn: ModelTurn,
@@ -177,6 +191,18 @@ class ModelToolLoop:
                 for item in outputs
             ]
             previous_response_id = turn.response_id
+        try:
+            answer = self.adapter.finalize(inputs, previous_response_id)
+        except Exception:
+            answer = ""
+        if answer:
+            return {
+                "status": "completed",
+                "answer": answer,
+                "steps": self.max_steps,
+                "tool_trace": trace,
+                "tool_budget_exhausted": True,
+            }
         return {
             "status": "budget_exhausted",
             "answer": "模型工具调用达到最大步数，工作流已停止。",
@@ -211,16 +237,7 @@ class OpenAIChatAdapter:
         return ModelTurn(text=message.content or "", tool_calls=calls), message
 
     def finalize(self, messages: list[dict[str, Any]]) -> str:
-        final_messages = [
-            *messages,
-            {
-                "role": "user",
-                "content": (
-                    "工具调用额度已用完。请只根据上面的成功 Tool 结果给出简洁结论；"
-                    "不得再调用工具，不得补充未被证据支持的数值。"
-                ),
-            },
-        ]
+        final_messages = [*messages, {"role": "user", "content": FINALIZE_PROMPT}]
         response = self.client.chat.completions.create(
             model=self.model,
             messages=final_messages,

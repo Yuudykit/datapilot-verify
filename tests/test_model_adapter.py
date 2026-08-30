@@ -70,6 +70,47 @@ def test_responses_adapter_survives_malformed_tool_arguments(tmp_path: Path) -> 
     assert "malformed JSON" in failed["error"]["message"]
 
 
+class RepeatingToolResponses:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.finalize_request: dict | None = None
+
+    def create(self, **kwargs):
+        self.calls += 1
+        if "tools" not in kwargs:
+            self.finalize_request = kwargs
+            return SimpleNamespace(output=[], output_text="只基于已有结果总结")
+        call = SimpleNamespace(
+            type="function_call",
+            call_id="call_repeat",
+            name="echo",
+            arguments='{"value":"hello"}',
+        )
+        return SimpleNamespace(output=[call], output_text="", id="resp-1")
+
+
+def test_responses_loop_finalizes_without_tools_at_budget_limit(tmp_path: Path) -> None:
+    responses = RepeatingToolResponses()
+    client = SimpleNamespace(responses=responses)
+    registry = ToolRegistry()
+    registry.register(echo)
+    context = ToolContext("test", tmp_path, tmp_path)
+    loop = ModelToolLoop(
+        OpenAIModelAdapter(client, model="test-model"), registry, context, max_steps=1
+    )
+    result = loop.run("echo hello", allowed={"echo"})
+    assert result["status"] == "completed"
+    assert result["tool_budget_exhausted"] is True
+    assert result["answer"] == "只基于已有结果总结"
+    assert responses.finalize_request is not None
+    assert "tools" not in responses.finalize_request
+    assert responses.finalize_request["previous_response_id"] == "resp-1"
+    assert any(
+        item.get("type") == "function_call_output"
+        for item in responses.finalize_request["input"]
+    )
+
+
 def test_openai_adapter_parses_and_executes_tool_calls(tmp_path: Path) -> None:
     responses = FakeResponses()
     client = SimpleNamespace(responses=responses)
