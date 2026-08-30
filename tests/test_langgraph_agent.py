@@ -41,6 +41,16 @@ def test_langgraph_routes_dataset_question() -> None:
     assert "order_id" in result["answer"]
 
 
+def test_langgraph_uses_question_months_for_comparison() -> None:
+    result = build_graph(ROOT).invoke(
+        "按渠道比较 5 月和 6 月的退款率变化", thread_id="period-route"
+    )
+    assert result["status"] == "completed"
+    comparison = result["data"]["plan"]["comparison"]
+    assert comparison["current_period"][0] == "2026-06-01"
+    assert comparison["previous_period"][0] == "2026-05-01"
+
+
 def test_langgraph_rejects_unrelated_question() -> None:
     result = build_graph(ROOT).invoke("今天天气怎么样", thread_id="unsupported-route")
     assert result["status"] == "unsupported"

@@ -197,17 +197,32 @@ class DataPilotGraph:
     def _run_analysis(self, state: AgentState) -> dict[str, Any]:
         from datetime import date
 
+        from datapilot_verify.agent.periods import (
+            latest_paid_date,
+            month_label,
+            resolve_comparison_periods,
+            to_comparison_dates,
+        )
         from datapilot_verify.domain.models import AnalysisPlan, ComparisonSpec, SortSpec
 
         question = state["question"]
         metric_id = self._metric_id(state)
         dimension = self._dimension(question)
+        # 对比期间不再硬编码：优先取问题里提到的月份，否则用数据最新月份
+        # （BUG-017）。样例兜底仅在无数据且无月份提示时使用。
+        data_end = latest_paid_date(self.context.workspace / "orders.csv")
+        periods = resolve_comparison_periods(question, data_end) or (
+            ((2026, 7), (2026, 6))
+        )
+        (cur_year, cur_month), (prev_year, prev_month) = periods
+        current_period, previous_period = to_comparison_dates(periods)
+        cur_label = month_label(cur_year, cur_month)
+        prev_label = month_label(prev_year, prev_month)
         plan = AnalysisPlan(
             plan_id=f"plan_{uuid.uuid4().hex[:10]}",
             dataset_ids=["orders", "stores"], metric=metric_id, dimensions=[dimension],
             comparison=ComparisonSpec(
-                type="mom", current_period=(date(2026, 7, 1), date(2026, 7, 31)),
-                previous_period=(date(2026, 6, 1), date(2026, 6, 30)),
+                type="mom", current_period=current_period, previous_period=previous_period,
             ), analysis="contribution", sort=[SortSpec(field="change_amount", direction="asc")],
             question=state["question"],
         )
@@ -220,19 +235,20 @@ class DataPilotGraph:
         name = metric.get("name", metric_id)
         unit = metric.get("unit", "")
         overall = result.data.get("overall") or {}
+        top_value = top.get(dimension) or "未知分组"
         if unit == "ratio":
             answer = (
-                f"整体{name}从 6 月 {overall.get('previous_value', 0):.1%}变为 "
-                f"7 月 {overall.get('current_value', 0):.1%}。按"
-                f"{self._dimension_label(dimension)}拆分，{top.get(dimension, '首要分组')}"
+                f"整体{name}从 {prev_label} {overall.get('previous_value', 0):.1%}变为 "
+                f"{cur_label} {overall.get('current_value', 0):.1%}。按"
+                f"{self._dimension_label(dimension)}拆分，{top_value}"
                 f"变化最大（{top.get('change_amount', 0):+.1%}）。"
             )
         else:
             total_current = overall.get("current_value", 0)
             total_change = overall.get("change_amount", 0)
             answer = (
-                f"7 月{name}为 {total_current:,.2f}，较 6 月变化 {total_change:,.2f}。"
-                f"{top.get(dimension, '首要分组')}是变化最大的"
+                f"{cur_label}{name}为 {total_current:,.2f}，较 {prev_label}变化 {total_change:,.2f}。"
+                f"{top_value}是变化最大的"
                 f"{self._dimension_label(dimension)}。"
             )
         snapshot_id = f"snap_{uuid.uuid4().hex[:12]}"

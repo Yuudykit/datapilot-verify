@@ -36,6 +36,15 @@ def test_ratio_metric_answer_reports_overall_rate_not_row_sum() -> None:
         (frame["paid_at"] >= "2026-07-01") & (frame["paid_at"] <= "2026-07-31")
     ]
     expected = (july["refund_amount"] > 0).sum() / july["order_id"].nunique()
-    assert f"7 月退款率为 {expected:.1%}" in response.answer
+    assert f"{expected:.1%}" in response.answer
+    assert "2026年7月" in response.answer
+
+
+def test_plan_uses_months_mentioned_in_question() -> None:
+    response = OfflineAgent(ROOT).ask("按品类比较 5 月和 6 月的净销售额变化")
+    assert response.status == "completed"
+    comparison = response.data["plan"]["comparison"]
+    assert comparison["current_period"][0] == "2026-06-01"
+    assert comparison["previous_period"][0] == "2026-05-01"
 
 

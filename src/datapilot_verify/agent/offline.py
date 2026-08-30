@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -90,12 +90,25 @@ class OfflineAgent:
         return self._run_decline_analysis(normalized, metric_choice or "net_sales")
 
     def _run_decline_analysis(self, question: str, metric_id: str) -> AgentResponse:
+        from datapilot_verify.agent.periods import (
+            latest_paid_date,
+            month_label,
+            resolve_comparison_periods,
+            to_comparison_dates,
+        )
+
         metric_id = self._infer_metric(question, metric_id)
         dimension = self._infer_dimension(question)
         metric = self.registry.execute("resolve_metric", {"query": metric_id}, self.context)
         docs = self.registry.execute(
             "search_metric_docs", {"query": "净销售额扣除退款及历史口径", "top_k": 3}, self.context
         )
+        data_end = latest_paid_date(self.context.workspace / "orders.csv")
+        periods = resolve_comparison_periods(question, data_end) or ((2026, 7), (2026, 6))
+        (cur_year, cur_month), (prev_year, prev_month) = periods
+        current_period, previous_period = to_comparison_dates(periods)
+        cur_label = month_label(cur_year, cur_month)
+        prev_label = month_label(prev_year, prev_month)
         plan = AnalysisPlan(
             plan_id=f"plan_{uuid.uuid4().hex[:10]}",
             dataset_ids=["orders", "stores"],
@@ -103,8 +116,8 @@ class OfflineAgent:
             dimensions=[dimension],
             comparison=ComparisonSpec(
                 type="mom",
-                current_period=(date(2026, 7, 1), date(2026, 7, 31)),
-                previous_period=(date(2026, 6, 1), date(2026, 6, 30)),
+                current_period=current_period,
+                previous_period=previous_period,
             ),
             analysis="contribution",
             sort=[SortSpec(field="change_amount", direction="asc")],
@@ -127,7 +140,7 @@ class OfflineAgent:
         top_rate = float(top.get("decline_contribution_rate", 0) or 0) if top else 0.0
         top_value = (top.get(dimension) or "未知分组") if top else ""
         if unit == "ratio":
-            answer = f"7 月{name}为 {current:.1%}，较 6 月变化 {change:+.1%}。"
+            answer = f"{cur_label}{name}为 {current:.1%}，较 {prev_label}变化 {change:+.1%}。"
             if top is None:
                 answer += "当前期间没有分组数据。"
             elif top_change < 0:
@@ -139,12 +152,15 @@ class OfflineAgent:
                 answer += f"按{label}拆分，各分组未见下降，{top_value}变化最大（{top_change:+.1%}）。"
         elif top is not None and top_change < 0:
             answer = (
-                f"7 月{name}为 {current:,.2f}，较 6 月变化 {change:,.2f}。"
+                f"{cur_label}{name}为 {current:,.2f}，较 {prev_label}变化 {change:,.2f}。"
                 f"{top_value}是变化最大的{label}，贡献了全部下降项的 {top_rate:.1%}，"
                 "是最主要的可观察贡献因素。"
             )
         else:
-            answer = f"7 月{name}为 {current:,.2f}，较 6 月变化 {change:,.2f}（6 月为 {previous:,.2f}），未见下降分组。"
+            answer = (
+                f"{cur_label}{name}为 {current:,.2f}，较 {prev_label}变化 {change:,.2f}"
+                f"（{prev_label}为 {previous:,.2f}），未见下降分组。"
+            )
         snapshot_id = f"snap_{uuid.uuid4().hex[:12]}"
         snapshot = AnalysisSnapshot(
             snapshot_id=snapshot_id,

@@ -19,6 +19,7 @@
 | BUG-015 | 2026-08-30 | live 模型适配器 | P1 | 已修复 | 模型畸形 tool-call JSON 未捕获，整个会话崩溃 | [BUG-015](bugs/BUG-015-model-adapter-malformed-json.md) |
 | BUG-016 | 2026-08-30 | Streamlit / DesktopApp | P1 | 已修复 | 界面无澄清交互，口径确认流程断头 | [BUG-016](bugs/BUG-016-streamlit-clarification-dead-end.md) |
 | BUG-018 | 2026-08-30 | DesktopApp | P2 | 已修复 | live 缺 API Key 时静默降级 mock | [BUG-018](bugs/BUG-018-live-missing-key-silent-mock.md) |
+| BUG-017 | 2026-08-30 | LangGraph / OfflineAgent | P1 | 已修复 | 对比期间硬编码，问题中的月份被忽略 | [BUG-017](bugs/BUG-017-hardcoded-comparison-periods.md) |
 
 ## 记录规则
 
