@@ -8,22 +8,28 @@ class PythonPolicy:
     BLOCKED_CALLS = {
         "breakpoint",
         "compile",
+        "delattr",
         "eval",
         "exec",
+        "getattr",
         "globals",
         "help",
         "input",
         "locals",
         "open",
+        "setattr",
+        "vars",
         "__import__",
     }
     BLOCKED_ATTRIBUTES = {
         "chmod",
         "connect",
         "environ",
+        "eval",
         "exec",
         "fork",
         "kill",
+        "mkdir",
         "popen",
         "remove",
         "rename",
@@ -31,10 +37,22 @@ class PythonPolicy:
         "rmdir",
         "socket",
         "spawn",
+        "symlink",
         "system",
+        "to_csv",
+        "to_excel",
+        "to_hdf",
+        "to_json",
+        "to_parquet",
+        "to_pickle",
+        "to_sql",
         "unlink",
+        "write_bytes",
+        "write_text",
     }
-    ALLOWED_DATA_READERS = {"read_csv", "read_excel", "scan_csv"}
+    # 数据读取统一约束到注入的 input_csv，避免 read_json/read_pickle 等
+    # 非白名单 reader 读取任意路径甚至 URL（read_json 支持网络地址）。
+    DATA_READER_PREFIXES = ("read_", "scan_")
 
     def validate(self, code: str) -> ast.Module:
         try:
@@ -54,7 +72,7 @@ class PythonPolicy:
                 if node.attr.casefold() in self.BLOCKED_ATTRIBUTES or node.attr.startswith("__"):
                     raise ValueError(f"blocked Python attribute: {node.attr}")
             elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                if node.func.attr in self.ALLOWED_DATA_READERS:
+                if node.func.attr.startswith(self.DATA_READER_PREFIXES):
                     if not node.args or not isinstance(node.args[0], ast.Name):
                         raise ValueError("data readers must use the injected input_csv variable")
                     if node.args[0].id != "input_csv":

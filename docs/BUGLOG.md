@@ -24,6 +24,7 @@
 | BUG-020 | 2026-08-30 | DesktopApp / Streamlit | P2 | 已修复 | 每次分析/重渲染重建链路、重复 profile 与导出 | [BUG-020](bugs/BUG-020-desktop-redundant-work.md) |
 | BUG-022 | 2026-08-30 | LangGraph / OfflineAgent | P2 | 已修复 | 路由关键词优先级不当，混合问题与门店表检查错误 | [BUG-022](bugs/BUG-022-mock-routing-keywords.md) |
 | BUG-023 | 2026-08-30 | webapp/api.py | P2 | 已修复 | API 各端点数据面不一致，上传数据集无法被分析 | [BUG-023](bugs/BUG-023-api-data-plane-inconsistency.md) |
+| BUG-021 | 2026-08-30 | sandbox/policy.py | P2 | 已修复 | getattr/read_* URL/to_csv 等策略绕过口 | [BUG-021](bugs/BUG-021-sandbox-policy-gaps.md) |
 
 ## 记录规则
 
