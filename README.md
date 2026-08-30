@@ -110,4 +110,5 @@ D:\agent-gpt\.conda-env\Scripts\ruff.exe check src webapp tests scripts conftest
 修正表头。要恢复样例，退出后删除 workspace 中对应文件，重新启动会自动补回；
 删除业务数据前请备份。
 
-完整修改记录见 [docs/BUGLOG.md](docs/BUGLOG.md) 和 `docs/bugs/`。
+完整修改记录见 [docs/BUGLOG.md](docs/BUGLOG.md) 和 `docs/bugs/`；架构与运行逻辑、
+组件职责和设计理由见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
