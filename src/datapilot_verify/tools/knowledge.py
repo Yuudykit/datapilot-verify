@@ -67,7 +67,10 @@ def build_knowledge_tools(
 
     @tool(
         name="search_metric_docs",
-        description="Search metric explanations, changes, exceptions, and business guidance with citations.",
+        description=(
+            "Search metric explanations, changes, exceptions, and business guidance "
+            "with citations."
+        ),
         args_model=SearchMetricDocsArgs,
         stage="knowledge",
     )

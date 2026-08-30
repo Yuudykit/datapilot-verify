@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -81,11 +81,16 @@ class OfflineAgent:
         analysis_intent = any(
             term in normalized for term in ("下降", "上涨", "变化", "比较", "为什么")
         )
-        if any(term in normalized for term in ("定义", "口径", "包含退款", "扣除退款")) and not analysis_intent:
+        definition_terms = ("定义", "口径", "包含退款", "扣除退款")
+        if any(term in normalized for term in definition_terms) and not analysis_intent:
             metric = self.registry.execute("resolve_metric", {"query": normalized}, self.context)
-            docs = self.registry.execute("search_metric_docs", {"query": normalized, "top_k": 3}, self.context)
+            docs = self.registry.execute(
+                "search_metric_docs", {"query": normalized, "top_k": 3}, self.context
+            )
             matches = metric.data.get("matches", [])
-            description = matches[0]["metric"]["description"] if matches else "没有找到正式指标定义。"
+            description = (
+                matches[0]["metric"]["description"] if matches else "没有找到正式指标定义。"
+            )
             return AgentResponse(
                 status="completed",
                 answer=description,
@@ -93,7 +98,10 @@ class OfflineAgent:
                     AgentEvent("resolve_metric", metric.trace_id, metric.ok, "解析指标"),
                     AgentEvent("search_metric_docs", docs.trace_id, docs.ok, "检索口径文档"),
                 ],
-                data={"metric": matches[0] if matches else None, "documents": docs.data.get("results", [])},
+                data={
+                    "metric": matches[0] if matches else None,
+                    "documents": docs.data.get("results", []),
+                },
                 citations=[item.model_dump(mode="json") for item in docs.evidence],
             )
         return self._run_decline_analysis(normalized, metric_choice or "net_sales")
@@ -132,7 +140,9 @@ class OfflineAgent:
             sort=[SortSpec(field="change_amount", direction="asc")],
             question=question,
         )
-        analysis = self.registry.execute("run_analysis", {"plan": plan.model_dump(mode="json")}, self.context)
+        analysis = self.registry.execute(
+            "run_analysis", {"plan": plan.model_dump(mode="json")}, self.context
+        )
         rows = analysis.data.get("rows", [])
         metric_info = analysis.data.get("metric", {})
         name = metric_info.get("name", metric_id)
@@ -144,7 +154,11 @@ class OfflineAgent:
         previous = float(overall.get("previous_value", 0) or 0)
         change = float(overall.get("change_amount", 0) or 0)
         label = self._dimension_label(dimension)
-        top = max(rows, key=lambda row: abs(float(row.get("change_amount", 0) or 0))) if rows else None
+
+        def row_change(row: dict[str, Any]) -> float:
+            return abs(float(row.get("change_amount", 0) or 0))
+
+        top = max(rows, key=row_change) if rows else None
         top_change = float(top.get("change_amount", 0) or 0) if top else 0.0
         top_rate = float(top.get("decline_contribution_rate", 0) or 0) if top else 0.0
         top_value = (top.get(dimension) or "未知分组") if top else ""
@@ -158,7 +172,9 @@ class OfflineAgent:
                     f"占下降分组合计变化的 {top_rate:.1%}。"
                 )
             else:
-                answer += f"按{label}拆分，各分组未见下降，{top_value}变化最大（{top_change:+.1%}）。"
+                answer += (
+                    f"按{label}拆分，各分组未见下降，{top_value}变化最大（{top_change:+.1%}）。"
+                )
         elif top is not None and top_change < 0:
             answer = (
                 f"{cur_label}{name}为 {current:,.2f}，较 {prev_label}变化 {change:,.2f}。"
@@ -173,7 +189,7 @@ class OfflineAgent:
         snapshot_id = f"snap_{uuid.uuid4().hex[:12]}"
         snapshot = AnalysisSnapshot(
             snapshot_id=snapshot_id,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             question=question,
             dataset_hashes={
                 "orders": sha256_file(self.context.workspace / "orders.csv"),
@@ -197,7 +213,11 @@ class OfflineAgent:
                 AgentEvent("search_metric_docs", docs.trace_id, docs.ok, "检索业务文档"),
                 AgentEvent("run_analysis", analysis.trace_id, analysis.ok, "执行并验证分析"),
             ],
-            data={"plan": plan.model_dump(mode="json"), "rows": rows, "verification": analysis.data.get("verification")},
+            data={
+                "plan": plan.model_dump(mode="json"),
+                "rows": rows,
+                "verification": analysis.data.get("verification"),
+            },
             citations=citations,
             snapshot_id=snapshot_id,
         )
@@ -208,7 +228,8 @@ class OfflineAgent:
             return "refund_rate"
         if "客单价" in question or "平均订单" in question:
             return "avg_order_value"
-        return fallback if fallback in {"net_sales", "refund_rate", "avg_order_value"} else "net_sales"
+        known = {"net_sales", "refund_rate", "avg_order_value"}
+        return fallback if fallback in known else "net_sales"
 
     @staticmethod
     def _infer_dimension(question: str) -> str:

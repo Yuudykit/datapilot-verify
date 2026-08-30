@@ -9,7 +9,6 @@ from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "sample"
 GOLDEN = ROOT / "data" / "golden"

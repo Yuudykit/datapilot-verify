@@ -10,7 +10,6 @@ from urllib.parse import urlparse
 
 from datapilot_verify.agent import build_graph
 
-
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = Path(__file__).resolve().parent
 AGENT = build_graph(ROOT)

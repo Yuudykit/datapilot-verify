@@ -80,9 +80,12 @@ class PlanCompiler:
         else:
             where = self._compile_filters(plan.filters, parameters)
             select_dimensions = ", ".join(
-                f"{expression} AS {alias}" for expression, alias in zip(dimensions, aliases)
+                f"{expression} AS {alias}"
+                for expression, alias in zip(dimensions, aliases, strict=True)
             )
-            select_parts = [part for part in (select_dimensions, f"{metric.expression} AS value") if part]
+            select_parts = [
+                part for part in (select_dimensions, f"{metric.expression} AS value") if part
+            ]
             query = (
                 f"SELECT {', '.join(select_parts)}\n"
                 'FROM "orders" o\n'
@@ -112,7 +115,8 @@ class PlanCompiler:
         parameters.extend([previous_start, previous_end])
         previous_filters = self._compile_filters(plan.filters, parameters, prefix=" AND ")
         dimension_select = ", ".join(
-            f"{expression} AS {alias}" for expression, alias in zip(dimensions, aliases)
+            f"{expression} AS {alias}"
+            for expression, alias in zip(dimensions, aliases, strict=True)
         )
         select_prefix = f"{dimension_select}, " if dimension_select else ""
         group_by = "\nGROUP BY " + ", ".join(dimensions) if dimensions else ""
@@ -170,7 +174,14 @@ FULL OUTER JOIN previous_period p ON {join_keys}'''
     def _compile_order_limit(plan: AnalysisPlan) -> str:
         suffix = ""
         if plan.sort:
-            allowed_outputs = {*plan.dimensions, "value", "current_value", "previous_value", "change_amount", "change_rate"}
+            allowed_outputs = {
+                *plan.dimensions,
+                "value",
+                "current_value",
+                "previous_value",
+                "change_amount",
+                "change_rate",
+            }
             order = []
             for item in plan.sort:
                 if item.field not in allowed_outputs:

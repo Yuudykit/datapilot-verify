@@ -7,7 +7,6 @@ from datapilot_verify.compiler import PlanCompiler
 from datapilot_verify.domain.models import AnalysisPlan, ComparisonSpec, SortSpec
 from datapilot_verify.semantic import SemanticRepository
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

@@ -7,7 +7,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from datapilot_verify.domain.models import ArtifactRef, EvidenceRef, ToolResult
+from datapilot_verify.domain.models import (
+    ArtifactRef,
+    ErrorCode,
+    EvidenceRef,
+    ToolError,
+    ToolResult,
+)
 from datapilot_verify.evidence import SnapshotStore, sha256_file
 from datapilot_verify.rag import HybridRetriever
 from datapilot_verify.semantic import SemanticRepository
@@ -29,6 +35,30 @@ def _store(context: ToolContext) -> SnapshotStore:
     return SnapshotStore(context.output_dir / "snapshots")
 
 
+def _load_snapshot(
+    context: ToolContext, snapshot_id: str, trace_id: str
+) -> tuple[Any, ToolResult | None]:
+    # 快照缺失/ID 非法返回精确错误码，而不是被工具边界统一成 INTERNAL。
+    try:
+        return _store(context).load(snapshot_id), None
+    except ValueError:
+        return None, ToolResult(
+            ok=False,
+            error=ToolError(
+                code=ErrorCode.BAD_PARAMS, message=f"invalid snapshot id: {snapshot_id}"
+            ),
+            trace_id=trace_id,
+        )
+    except FileNotFoundError:
+        return None, ToolResult(
+            ok=False,
+            error=ToolError(
+                code=ErrorCode.NOT_FOUND, message=f"snapshot not found: {snapshot_id}"
+            ),
+            trace_id=trace_id,
+        )
+
+
 def build_artifact_tools(
     semantic_path: Path, knowledge_dir: Path
 ) -> tuple[Tool, Tool, Tool, Tool]:
@@ -42,7 +72,9 @@ def build_artifact_tools(
         stage="evidence",
     )
     def get_evidence(*, args: SnapshotArgs, context: ToolContext, trace_id: str) -> ToolResult:
-        snapshot = _store(context).load(args.snapshot_id)
+        snapshot, failure = _load_snapshot(context, args.snapshot_id, trace_id)
+        if failure is not None:
+            return failure
         return ToolResult(
             ok=True,
             data={"snapshot": snapshot.model_dump(mode="json")},
@@ -68,7 +100,9 @@ def build_artifact_tools(
         stage="evidence",
     )
     def replay_analysis(*, args: SnapshotArgs, context: ToolContext, trace_id: str) -> ToolResult:
-        snapshot = _store(context).load(args.snapshot_id)
+        snapshot, failure = _load_snapshot(context, args.snapshot_id, trace_id)
+        if failure is not None:
+            return failure
         if snapshot.plan is None:
             raise ValueError("snapshot has no replayable analysis plan")
         from datapilot_verify.tools.analysis import build_run_analysis_tool
@@ -165,7 +199,9 @@ def build_artifact_tools(
         stage="presentation",
     )
     def export_report(*, args: SnapshotArgs, context: ToolContext, trace_id: str) -> ToolResult:
-        snapshot = _store(context).load(args.snapshot_id)
+        snapshot, failure = _load_snapshot(context, args.snapshot_id, trace_id)
+        if failure is not None:
+            return failure
         payload = snapshot.model_dump(mode="json")
         path = (context.output_dir / "reports" / f"report_{snapshot.snapshot_id}.md").resolve()
         path.parent.mkdir(parents=True, exist_ok=True)

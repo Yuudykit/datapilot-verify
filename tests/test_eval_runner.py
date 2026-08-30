@@ -2,7 +2,6 @@ from pathlib import Path
 
 from datapilot_verify.eval.runner import run_eval
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

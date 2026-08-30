@@ -116,7 +116,9 @@ class OpenAIModelAdapter:
             response_id=getattr(response, "id", None),
         )
 
-    def finalize(self, inputs: list[dict[str, Any]], previous_response_id: str | None = None) -> str:
+    def finalize(
+        self, inputs: list[dict[str, Any]], previous_response_id: str | None = None
+    ) -> str:
         """步数用尽后的兜底总结：不带 tools 再问一次，只基于已有工具结果作答。"""
         response = self.client.responses.create(
             model=self.model,

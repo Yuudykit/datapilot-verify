@@ -4,7 +4,6 @@ import pytest
 
 from datapilot_verify.data import DatasetCatalog
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

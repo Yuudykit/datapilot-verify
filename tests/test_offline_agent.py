@@ -4,7 +4,6 @@ import pandas as pd
 
 from datapilot_verify.agent import OfflineAgent
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

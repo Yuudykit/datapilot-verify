@@ -11,7 +11,9 @@ class VerificationReport:
     warnings: list[str] = field(default_factory=list)
 
 
-def verify_comparison_rows(rows: list[dict[str, Any]], tolerance: float = 1e-9) -> VerificationReport:
+def verify_comparison_rows(
+    rows: list[dict[str, Any]], tolerance: float = 1e-9
+) -> VerificationReport:
     checks = {
         "change_amount_consistent": True,
         "change_rate_consistent": True,
@@ -31,7 +33,9 @@ def verify_comparison_rows(rows: list[dict[str, Any]], tolerance: float = 1e-9) 
             if actual_rate is not None:
                 checks["change_rate_consistent"] = False
                 warnings.append(f"row {index}: zero denominator should yield null rate")
-        elif actual_rate is None or abs(float(actual_rate) - expected_change / previous) > tolerance:
+        elif actual_rate is None or abs(
+            float(actual_rate) - expected_change / previous
+        ) > tolerance:
             checks["change_rate_consistent"] = False
             warnings.append(f"row {index}: change rate is inconsistent")
         for value in (current, previous, change):

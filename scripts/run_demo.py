@@ -9,7 +9,6 @@ from datapilot_verify.app import build_registry
 from datapilot_verify.domain.models import AnalysisPlan, ComparisonSpec, SortSpec
 from datapilot_verify.tools import ToolContext
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

@@ -2,7 +2,6 @@ from pathlib import Path
 
 from datapilot_verify.semantic import SemanticRepository
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

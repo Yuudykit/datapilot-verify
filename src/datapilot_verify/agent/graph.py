@@ -210,7 +210,6 @@ class DataPilotGraph:
         }
 
     def _run_analysis(self, state: AgentState) -> dict[str, Any]:
-        from datetime import date
 
         from datapilot_verify.agent.periods import (
             latest_paid_date,
@@ -262,7 +261,8 @@ class DataPilotGraph:
             total_current = overall.get("current_value", 0)
             total_change = overall.get("change_amount", 0)
             answer = (
-                f"{cur_label}{name}为 {total_current:,.2f}，较 {prev_label}变化 {total_change:,.2f}。"
+                f"{cur_label}{name}为 {total_current:,.2f}，"
+                f"较 {prev_label}变化 {total_change:,.2f}。"
                 f"{top_value}是变化最大的"
                 f"{self._dimension_label(dimension)}。"
             )

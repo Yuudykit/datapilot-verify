@@ -39,7 +39,7 @@ class DuckDBEngine:
             connection.read_csv(str(stores), header=True).create_view("stores")
             cursor = connection.execute(query.sql, query.parameters)
             columns = [item[0] for item in cursor.description]
-            rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            rows = [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
         finally:
             connection.close()
         encoded = json.dumps(rows, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")

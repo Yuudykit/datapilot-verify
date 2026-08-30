@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,6 +61,27 @@ class HashingEmbedder:
         return vector / norm if norm else vector
 
 
+def _build_chunk(
+    path: Path,
+    version: str | None,
+    section_buffer: list[str],
+    section_heading: str,
+    section_start: int,
+) -> DocumentChunk | None:
+    text = "\n".join(section_buffer).strip()
+    if not text:
+        return None
+    raw_id = f"{path.name}:{section_start}:{section_heading}"
+    return DocumentChunk(
+        chunk_id=hashlib.sha1(raw_id.encode("utf-8")).hexdigest()[:12],
+        source=path.name,
+        heading=section_heading,
+        text=text,
+        version=version,
+        line_start=section_start,
+    )
+
+
 class HybridRetriever:
     def __init__(self, knowledge_dir: Path, rrf_k: int = 60) -> None:
         self.knowledge_dir = knowledge_dir
@@ -92,33 +112,18 @@ class HybridRetriever:
             heading = path.stem
             buffer: list[str] = []
             start = 1
-
-            def flush() -> None:
-                if not buffer:
-                    return
-                text = "\n".join(buffer).strip()
-                if not text:
-                    return
-                raw_id = f"{path.name}:{start}:{heading}"
-                chunks.append(
-                    DocumentChunk(
-                        chunk_id=hashlib.sha1(raw_id.encode("utf-8")).hexdigest()[:12],
-                        source=path.name,
-                        heading=heading,
-                        text=text,
-                        version=version,
-                        line_start=start,
-                    )
-                )
-
             for line_number, line in enumerate(lines, 1):
                 if line.startswith("## "):
-                    flush()
+                    chunk = _build_chunk(path, version, buffer, heading, start)
+                    if chunk is not None:
+                        chunks.append(chunk)
                     buffer = []
                     heading = line[3:].strip()
                     start = line_number
                 buffer.append(line)
-            flush()
+            chunk = _build_chunk(path, version, buffer, heading, start)
+            if chunk is not None:
+                chunks.append(chunk)
         return chunks
 
     def search(self, query: str, top_k: int = 5) -> list[SearchResult]:

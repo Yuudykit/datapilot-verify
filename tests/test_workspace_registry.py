@@ -1,8 +1,7 @@
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 from datapilot_verify.data import WorkspaceRegistry
-
 
 ROOT = Path(__file__).resolve().parents[1]
 

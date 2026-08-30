@@ -43,8 +43,10 @@ Chat Completions 适配器。
    `workspace/` 中对应角色，不修改 `data/sample/`。
 3. 输入问题并点击“开始分析”。例如：
    `7 月净销售额为什么下降？请先核对指标口径，再按区域分析贡献。`
-4. 查看结论、明细表、图表、Tool 执行审计和证据引用。
-5. 出现快照 ID 后点击“重放”检查结果哈希，或点击“下载报告”保存审计报告。
+4. 当问题里只写“销售额”这类多口径词时，界面会先弹出口径确认，选择
+   “净销售额”或“支付金额”后点击“确认口径并继续”。
+5. 查看结论、明细表、图表、Tool 执行审计和证据引用。
+6. 出现快照 ID 后点击“重放”检查结果哈希，或点击“下载报告”保存审计报告。
 
 支持的问题示例：
 
@@ -93,18 +95,19 @@ Swagger <http://127.0.0.1:8766/docs>、ReDoc `/redoc`、OpenAPI `/openapi.json`�
 ```powershell
 D:\agent-gpt\.conda-env\python.exe -m pip check
 D:\agent-gpt\.conda-env\python.exe -m pytest
-D:\agent-gpt\.conda-env\Scripts\ruff.exe check webapp\desktop.py webapp\streamlit_app.py tests\test_desktop_app.py
+D:\agent-gpt\.conda-env\Scripts\ruff.exe check src webapp tests scripts conftest.py
 ```
 
-当前基线：`54 passed`，Golden Set `8/8`。主要目录：`webapp/streamlit_app.py`（界面）、
+当前基线：`83 passed`，Golden Set `8/8`。主要目录：`webapp/streamlit_app.py`（界面）、
 `webapp/desktop.py`（单用户服务）、`src/datapilot_verify/`（Agent/Tool/RAG/执行/证据）、
 `workspace/`（用户数据）、`artifacts/desktop/`（快照和报告）、`docs/BUGLOG.md`（修改记录）。
 
 ## 常见问题
 
 `8767` 打不开时确认启动窗口仍在运行，并用 `netstat -ano | Select-String ':8767'` 检查
-端口。分析不调用模型时确认 `.env` 位于 `D:\agent-gpt`、`llm_mode=live` 且 Key 存在，然后
-重启。导入报缺字段时按上面的 schema 修正表头。要恢复样例，退出后删除 workspace 中对应
-文件，重新启动会自动补回；删除业务数据前请备份。
+端口。`llm_mode=live` 但 `.env` 缺少 Key 时分析会直接报错提示，不会静默改用 mock；
+确认 `.env` 位于 `D:\agent-gpt` 且 Key 存在后重启。导入报缺字段时按上面的 schema
+修正表头。要恢复样例，退出后删除 workspace 中对应文件，重新启动会自动补回；
+删除业务数据前请备份。
 
 完整修改记录见 [docs/BUGLOG.md](docs/BUGLOG.md) 和 `docs/bugs/`。

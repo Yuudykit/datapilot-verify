@@ -120,8 +120,8 @@ class DesktopApp:
     def datasets(self) -> list[dict[str, Any]]:
         names = sorted(self._files())
         signature = tuple(
-            (name, (self.workspace / name).stat().st_mtime_ns, (self.workspace / name).stat().st_size)
-            for name in names
+            (name, stat.st_mtime_ns, stat.st_size)
+            for name, stat in ((n, (self.workspace / n).stat()) for n in names)
         )
         if self._datasets_cache is not None and self._datasets_cache[0] == signature:
             return self._datasets_cache[1]

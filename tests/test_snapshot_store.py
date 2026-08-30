@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -10,7 +10,7 @@ def test_snapshot_roundtrip(tmp_path) -> None:
     store = SnapshotStore(tmp_path)
     snapshot = AnalysisSnapshot(
         snapshot_id="snapshot_1",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         question="why",
         dataset_hashes={"orders": "abc"},
         semantic_version="1",

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 
 from datapilot_verify.domain.models import AnalysisSnapshot
@@ -24,12 +23,19 @@ class SnapshotStore:
         path = self.root / f"{snapshot.snapshot_id}.json"
         self._assert_inside(path)
         temporary = path.with_suffix(".json.tmp")
-        temporary.write_text(snapshot.model_dump_json(indent=2), encoding="utf-8")
-        temporary.replace(path)
+        try:
+            temporary.write_text(snapshot.model_dump_json(indent=2), encoding="utf-8")
+            temporary.replace(path)
+        except OSError:
+            # 失败时不留下写了一半的 .json.tmp，避免污染快照目录。
+            temporary.unlink(missing_ok=True)
+            raise
         return path
 
+    _ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
+
     def load(self, snapshot_id: str) -> AnalysisSnapshot:
-        if not snapshot_id or any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for char in snapshot_id):
+        if not snapshot_id or not set(snapshot_id) <= self._ID_CHARS:
             raise ValueError("invalid snapshot id")
         path = self.root / f"{snapshot_id}.json"
         self._assert_inside(path)
