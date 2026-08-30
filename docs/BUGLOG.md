@@ -15,6 +15,7 @@
 | BUG-011 | 2026-08-30 | Python Worker | P2 | 已修复 | Windows 子进程非 UTF-8 输出触发解码异常 | [BUG-011](bugs/BUG-011-python-worker-output-encoding.md) |
 | BUG-012 | 2026-08-30 | Streamlit | P1 | 已修复 | 新请求失败时复用上一条结果，造成答案残留 | [BUG-012](bugs/BUG-012-stale-streamlit-result.md) |
 | BUG-013 | 2026-08-30 | pytest | P1 | 已修复 | 项目内 basetemp 目录 ACL 损坏且清理失败即会话失败 | [BUG-013](bugs/BUG-013-pytest-basetemp-corruption.md) |
+| BUG-014 | 2026-08-30 | OfflineAgent | P1 | 已修复 | 比率类指标按分组值求和，整体结论数值错误 | [BUG-014](bugs/BUG-014-offline-ratio-metric-sum.md) |
 
 ## 记录规则
 

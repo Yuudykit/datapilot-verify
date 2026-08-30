@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pandas as pd
+
 from datapilot_verify.agent import OfflineAgent
 
 
@@ -23,4 +25,17 @@ def test_runs_real_tools_after_metric_is_clear() -> None:
     assert response.data["verification"]["passed"]
     assert response.snapshot_id is not None
     assert "华东" in response.answer
+
+
+def test_ratio_metric_answer_reports_overall_rate_not_row_sum() -> None:
+    response = OfflineAgent(ROOT).ask("按渠道比较 6 月和 7 月的退款率变化")
+    assert response.status == "completed"
+
+    frame = pd.read_csv(ROOT / "data" / "sample" / "orders.csv")
+    july = frame[
+        (frame["paid_at"] >= "2026-07-01") & (frame["paid_at"] <= "2026-07-31")
+    ]
+    expected = (july["refund_amount"] > 0).sum() / july["order_id"].nunique()
+    assert f"7 月退款率为 {expected:.1%}" in response.answer
+
 

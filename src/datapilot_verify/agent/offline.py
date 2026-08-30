@@ -112,14 +112,39 @@ class OfflineAgent:
         )
         analysis = self.registry.execute("run_analysis", {"plan": plan.model_dump(mode="json")}, self.context)
         rows = analysis.data.get("rows", [])
-        top = rows[0] if rows else {}
-        answer = (
-            f"7 月{metric.data.get('matches', [{}])[0].get('metric', {}).get('name', metric_id)}为 "
-            f"{sum(row['current_value'] for row in rows):,.2f}，较 6 月变化 "
-            f"{sum(row['change_amount'] for row in rows):,.2f}。"
-            f"{top.get(dimension, '首要分组')}贡献了全部变化项的 "
-            f"{top.get('decline_contribution_rate', 0):.1%}，是最主要的可观察贡献因素。"
-        )
+        metric_info = analysis.data.get("metric", {})
+        name = metric_info.get("name", metric_id)
+        unit = metric_info.get("unit", "")
+        # 比率类指标（退款率/客单价）的整体值不等于分组值之和，必须用
+        # run_analysis 内部按相同口径聚合出的 overall 行，而不是汇总 rows。
+        overall = analysis.data.get("overall") or {}
+        current = float(overall.get("current_value", 0) or 0)
+        previous = float(overall.get("previous_value", 0) or 0)
+        change = float(overall.get("change_amount", 0) or 0)
+        label = self._dimension_label(dimension)
+        top = max(rows, key=lambda row: abs(float(row.get("change_amount", 0) or 0))) if rows else None
+        top_change = float(top.get("change_amount", 0) or 0) if top else 0.0
+        top_rate = float(top.get("decline_contribution_rate", 0) or 0) if top else 0.0
+        top_value = (top.get(dimension) or "未知分组") if top else ""
+        if unit == "ratio":
+            answer = f"7 月{name}为 {current:.1%}，较 6 月变化 {change:+.1%}。"
+            if top is None:
+                answer += "当前期间没有分组数据。"
+            elif top_change < 0:
+                answer += (
+                    f"按{label}拆分，{top_value}变化最大（{top_change:+.1%}），"
+                    f"占下降分组合计变化的 {top_rate:.1%}。"
+                )
+            else:
+                answer += f"按{label}拆分，各分组未见下降，{top_value}变化最大（{top_change:+.1%}）。"
+        elif top is not None and top_change < 0:
+            answer = (
+                f"7 月{name}为 {current:,.2f}，较 6 月变化 {change:,.2f}。"
+                f"{top_value}是变化最大的{label}，贡献了全部下降项的 {top_rate:.1%}，"
+                "是最主要的可观察贡献因素。"
+            )
+        else:
+            answer = f"7 月{name}为 {current:,.2f}，较 6 月变化 {change:,.2f}（6 月为 {previous:,.2f}），未见下降分组。"
         snapshot_id = f"snap_{uuid.uuid4().hex[:12]}"
         snapshot = AnalysisSnapshot(
             snapshot_id=snapshot_id,
@@ -169,3 +194,14 @@ class OfflineAgent:
             if any(item in question for item in term):
                 return dimension
         return "region"
+
+    @staticmethod
+    def _dimension_label(dimension: str) -> str:
+        labels = {
+            "region": "区域",
+            "city": "城市",
+            "store_id": "门店",
+            "category": "品类",
+            "channel": "渠道",
+        }
+        return labels[dimension]
