@@ -16,6 +16,7 @@
 | BUG-012 | 2026-08-30 | Streamlit | P1 | 已修复 | 新请求失败时复用上一条结果，造成答案残留 | [BUG-012](bugs/BUG-012-stale-streamlit-result.md) |
 | BUG-013 | 2026-08-30 | pytest | P1 | 已修复 | 项目内 basetemp 目录 ACL 损坏且清理失败即会话失败 | [BUG-013](bugs/BUG-013-pytest-basetemp-corruption.md) |
 | BUG-014 | 2026-08-30 | OfflineAgent | P1 | 已修复 | 比率类指标按分组值求和，整体结论数值错误 | [BUG-014](bugs/BUG-014-offline-ratio-metric-sum.md) |
+| BUG-015 | 2026-08-30 | live 模型适配器 | P1 | 已修复 | 模型畸形 tool-call JSON 未捕获，整个会话崩溃 | [BUG-015](bugs/BUG-015-model-adapter-malformed-json.md) |
 
 ## 记录规则
 

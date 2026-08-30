@@ -36,6 +36,40 @@ class FakeResponses:
         return SimpleNamespace(output=[call], output_text="")
 
 
+class MalformedResponses:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def create(self, **kwargs):
+        self.calls += 1
+        if self.calls > 1:
+            return SimpleNamespace(output=[], output_text="已纠正后作答")
+        call = SimpleNamespace(
+            type="function_call",
+            call_id="call_bad",
+            name="echo",
+            arguments='{"value": ',
+        )
+        return SimpleNamespace(output=[call], output_text="")
+
+
+def test_responses_adapter_survives_malformed_tool_arguments(tmp_path: Path) -> None:
+    client = SimpleNamespace(responses=MalformedResponses())
+    registry = ToolRegistry()
+    registry.register(echo)
+    context = ToolContext("test", tmp_path, tmp_path)
+    loop = ModelToolLoop(
+        OpenAIModelAdapter(client, model="test-model"), registry, context, max_steps=3
+    )
+    result = loop.run("echo hello", allowed={"echo"})
+    assert result["status"] == "completed"
+    assert result["answer"] == "已纠正后作答"
+    failed = result["tool_trace"][0]["result"]
+    assert failed["ok"] is False
+    assert failed["error"]["code"] == "BAD_PARAMS"
+    assert "malformed JSON" in failed["error"]["message"]
+
+
 def test_openai_adapter_parses_and_executes_tool_calls(tmp_path: Path) -> None:
     responses = FakeResponses()
     client = SimpleNamespace(responses=responses)

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from datapilot_verify.domain.models import ErrorCode, ToolError, ToolResult
 from datapilot_verify.tools import ToolContext, ToolRegistry
 
 SYSTEM_PROMPT = (
@@ -22,6 +24,7 @@ class ToolCall:
     call_id: str
     name: str
     arguments: dict[str, Any]
+    arguments_error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,34 @@ class ModelTurn:
     text: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
     response_id: str | None = None
+
+
+def _parse_arguments(call_id: str, name: str, raw: Any) -> ToolCall:
+    """模型输出的 arguments 可能不是合法 JSON（BUG-015）；解析失败时记录
+    错误而不是让整个会话崩溃，由工具循环把它作为失败结果回传给模型重试。"""
+    if isinstance(raw, str):
+        try:
+            return ToolCall(call_id=call_id, name=name, arguments=json.loads(raw))
+        except json.JSONDecodeError as exc:
+            return ToolCall(
+                call_id=call_id, name=name, arguments={}, arguments_error=str(exc)
+            )
+    return ToolCall(call_id=call_id, name=name, arguments=raw)
+
+
+def _invalid_arguments_result(call: ToolCall) -> dict[str, Any]:
+    result = ToolResult(
+        ok=False,
+        error=ToolError(
+            code=ErrorCode.BAD_PARAMS,
+            message=(
+                f"model emitted malformed JSON arguments for tool {call.name}: "
+                f"{call.arguments_error}"
+            ),
+        ),
+        trace_id=f"tool_{uuid.uuid4().hex[:12]}",
+    )
+    return {"call_id": call.call_id, "name": call.name, "result": result.model_dump(mode="json")}
 
 
 class ResponsesClient(Protocol):
@@ -67,13 +98,11 @@ class OpenAIModelAdapter:
         for item in getattr(response, "output", []) or []:
             if getattr(item, "type", None) != "function_call":
                 continue
-            raw = getattr(item, "arguments", "{}")
-            arguments = json.loads(raw) if isinstance(raw, str) else raw
             calls.append(
-                ToolCall(
+                _parse_arguments(
                     call_id=getattr(item, "call_id", getattr(item, "id", "")),
                     name=item.name,
-                    arguments=arguments,
+                    raw=getattr(item, "arguments", "{}"),
                 )
             )
         return ModelTurn(
@@ -89,16 +118,21 @@ class OpenAIModelAdapter:
         context: ToolContext,
         allowed: set[str] | None = None,
     ) -> list[dict[str, Any]]:
-        return [
-            {
-                "call_id": call.call_id,
-                "name": call.name,
-                "result": registry.execute(call.name, call.arguments, context, allowed).model_dump(
-                    mode="json"
-                ),
-            }
-            for call in turn.tool_calls
-        ]
+        outputs: list[dict[str, Any]] = []
+        for call in turn.tool_calls:
+            if call.arguments_error is not None:
+                outputs.append(_invalid_arguments_result(call))
+                continue
+            outputs.append(
+                {
+                    "call_id": call.call_id,
+                    "name": call.name,
+                    "result": registry.execute(
+                        call.name, call.arguments, context, allowed
+                    ).model_dump(mode="json"),
+                }
+            )
+        return outputs
 
 
 class ModelToolLoop:
@@ -169,10 +203,8 @@ class OpenAIChatAdapter:
         )
         message = response.choices[0].message
         calls = [
-            ToolCall(
-                call_id=item.id,
-                name=item.function.name,
-                arguments=json.loads(item.function.arguments),
+            _parse_arguments(
+                call_id=item.id, name=item.function.name, raw=item.function.arguments
             )
             for item in (message.tool_calls or [])
         ]
@@ -242,6 +274,21 @@ class ChatToolLoop:
                 }
             )
             for call in turn.tool_calls:
+                if call.arguments_error is not None:
+                    payload = _invalid_arguments_result(call)["result"]
+                    trace.append(
+                        {"call_id": call.call_id, "name": call.name, "result": payload}
+                    )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call.call_id,
+                            "content": json.dumps(
+                                payload, ensure_ascii=False, default=str
+                            ),
+                        }
+                    )
+                    continue
                 result = self.registry.execute(call.name, call.arguments, self.context, allowed)
                 payload = result.model_dump(mode="json")
                 trace.append({"call_id": call.call_id, "name": call.name, "result": payload})
