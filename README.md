@@ -9,6 +9,18 @@ DataPilot Verify 是本机单用户经营分析软件：导入订单与门店数
 
 固定使用 `D:\agent-gpt\.conda-env`，不要创建第二个环境。
 
+**一键演示脚本**（推荐）：自动检测服务是否已运行（已在运行则直接打开页面）、
+端口占用时提示占用进程、启动后轮询健康检查、自检工作区数据与模型模式，最后
+自动打开浏览器：
+
+```powershell
+右键 D:\agent-gpt\scripts\demo_start.ps1 → "使用 PowerShell 运行"
+# 或命令行：
+powershell -ExecutionPolicy Bypass -File D:\agent-gpt\scripts\demo_start.ps1
+```
+
+手动启动（效果相同）：
+
 ```powershell
 Set-Location D:\agent-gpt
 .\scripts\start_desktop.ps1
