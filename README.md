@@ -1,126 +1,272 @@
 # DataPilot Verify
 
-DataPilot Verify 是本机单用户经营分析软件：导入订单与门店数据，用自然语言提问，Agent
-调用指标语义、RAG、SQL/Python 执行和数值校验工具，返回带审计证据的结论，并生成可重放
-快照与 Markdown 报告。普通用户入口是 Streamlit：<http://127.0.0.1:8767>；FastAPI
-仅用于开发和自动化联调。
+**一个可审计的本机经营分析 Agent。** 用自然语言问订单/门店数据，模型只负责规划和叙事，数字来自受控 SQL / Python 执行；每次分析落一条快照，带 SQL、数据哈希、口径版本和结果哈希，可以原样重放核对。
 
-## 快速启动
+> 个人项目，不是生产系统：本机单用户、只绑 `127.0.0.1`、无鉴权、无多租户、没做过并发压测。边界在[第 9 节](#9-已知限制)写清楚了。
 
-固定使用 `D:\agent-gpt\.conda-env`，不要创建第二个环境。
+## 1. 它解决什么问题
 
-**一键演示脚本**（推荐）：自动检测服务是否已运行（已在运行则直接打开页面）、
-端口占用时提示占用进程、启动后轮询健康检查、自检工作区数据与模型模式，最后
-自动打开浏览器：
+让大模型分析经营数据，"能不能答"早就不难，难的是**答完敢不敢用**：
 
-```powershell
-右键 D:\agent-gpt\scripts\demo_start.ps1 → "使用 PowerShell 运行"
-# 或命令行：
-powershell -ExecutionPolicy Bypass -File D:\agent-gpt\scripts\demo_start.ps1
-```
+| 疑问 | 这里的做法 |
+| --- | --- |
+| 这个数字怎么算出来的？ | 模型不写 SQL。它产出结构化 `AnalysisPlan`，由 `PlanCompiler` 编译成参数化只读 SQL，再用 `sqlglot` 校验只允许单条 `SELECT`；结果行 JSON 序列化（键排序）后取 SHA-256 作为 `result_hash` |
+| 换一天/换个人再问，结论还一样吗？ | 每次分析写 `AnalysisSnapshot`：数据文件哈希 + 指标口径版本 + 知识库版本 + plan + SQL + `result_hash`。重放时按原 plan 重跑，逐项对比 data / semantic / knowledge / result 四个维度 |
+| 大家说的"销售额"是同一个口径吗？ | 指标定义集中在 `data/semantic/metrics.yml`，模型必须通过 `resolve_metric` 查询；口径回答必须引用知识文档；遇到多口径词时工作流会中断，让用户先确认口径 |
 
-手动启动（效果相同）：
+一句话：卖点不是"AI 很聪明"，而是 **AI 给出的每个数都能追到 SQL 和数据版本**。
 
-```powershell
-Set-Location D:\agent-gpt
-.\scripts\start_desktop.ps1
-```
+## 2. 五分钟跑起来
 
-然后打开 <http://127.0.0.1:8767>。启动窗口需保持运行，退出按 `Ctrl+C`。直接启动命令：
+### 2.1 安装环境
+
+在仓库根目录执行，二选一：
+
+**conda（推荐，`environment.yml` 已固定 Python 3.11）**
 
 ```powershell
-D:\agent-gpt\.conda-env\python.exe -m streamlit run webapp\streamlit_app.py --server.address 127.0.0.1 --server.port 8767
+conda env create -f environment.yml
+conda activate datapilot-verify
 ```
 
-## 配置模型
+**venv**
 
-根目录 `.env` 示例：
+```powershell
+python -m venv .venv
+.venv\Scripts\activate            # macOS / Linux: source .venv/bin/activate
+pip install -e ".[full]"
+```
+
+要求 Python 3.11（`pyproject.toml` 限定 `>=3.11,<3.13`；开发验证用的是 3.11.16）。
+
+### 2.2 配置（可以跳过）
+
+不写任何配置也能跑：默认就是 **mock 模式**，走本地确定性工作流，不调用模型 API，不产生费用。想自定义时：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`.env` 常用项：
+
+| 变量 | 默认 / 示例 | 说明 |
+| --- | --- | --- |
+| `DATAPILOT_LLM_MODE` | `mock` | `mock` 用确定性 LangGraph 图；`live` 调真实模型 |
+| `DATAPILOT_LLM_MODEL` | `deepseek-chat` | 模型名 |
+| `DATAPILOT_LLM_BASE_URL` | `https://api.deepseek.com` | OpenAI 兼容端点 |
+| `DATAPILOT_LLM_API_KEY` | 空 | `live` 模式必填 |
+| `DATAPILOT_MAX_TOOL_STEPS` | `8` | 单次分析的工具步数预算 |
+
+`.env` 已在 `.gitignore` 中，不会被提交。Key 只放在 `.env`。
+
+### 2.3 启动界面
+
+从**仓库根目录**执行（`webapp` 不是安装包，需要在根目录下导入）：
+
+```powershell
+python -m streamlit run webapp/streamlit_app.py --server.address 127.0.0.1 --server.port 8767
+```
+
+浏览器打开 <http://127.0.0.1:8767>。首次启动会自动把 `data/sample/` 下的样例数据补到 `workspace/`，并在 `artifacts/` 下创建快照和报告目录；这两个目录都在 `.gitignore` 里。启动窗口保持运行，退出按 `Ctrl+C`。
+
+### 2.4 问一个问题
+
+页面默认问题就是 **“7 月净销售额为什么下降？”**，点“开始分析”。mock 模式下会依次执行：解析指标 → 检索口径文档 → 编译并执行 SQL → 按区域做贡献拆解 → 数值校验 → 写快照。
+
+侧边栏也可以“上传 CSV / Excel”替换 `orders` 或 `stores` 数据；样例数据不会被覆盖。
+
+### 2.5 切到 live 模式
+
+在 `.env` 里写：
 
 ```dotenv
 DATAPILOT_LLM_MODE=live
-DATAPILOT_LLM_MODEL=deepseek-v4-flash
+DATAPILOT_LLM_MODEL=deepseek-chat
 DATAPILOT_LLM_BASE_URL=https://api.deepseek.com
-DATAPILOT_LLM_API_KEY=你的APIKey
-DATAPILOT_MAX_TOOL_STEPS=8
+DATAPILOT_LLM_API_KEY=sk-...
 ```
 
-`live` 使用真实模型 Tool Calling，`mock` 使用本地确定性工作流。修改 `.env` 后需重启。
-Key 只能放在 `.env`，不要写入 README、源码、日志或 `.env.example`。DeepSeek 使用
-Chat Completions 适配器。
+live 模式下由模型决定调哪些工具、失败后如何自纠；工具层、SQL 策略、校验、快照、重放与 mock 完全一致，变的只是“谁来决策”。缺 Key 会直接报错，**不会静默降级成 mock**（BUG-018）。
 
-## 普通用户流程
+## 3. 一条结论长什么样
 
-1. 启动后左侧会自动显示内置 `orders.csv`、`stores.csv` 样例。
-2. 选择“订单明细”或“门店维表”，上传 CSV/XLSX/XLS，点击“导入工作区”。导入只替换
-   `workspace/` 中对应角色，不修改 `data/sample/`。
-3. 输入问题并点击“开始分析”。例如：
-   `7 月净销售额为什么下降？请先核对指标口径，再按区域分析贡献。`
-4. 当问题里只写“销售额”这类多口径词时，界面会先弹出口径确认，选择
-   “净销售额”或“支付金额”后点击“确认口径并继续”。
-5. 查看结论、明细表、图表、Tool 执行审计和证据引用。
-6. 出现快照 ID 后点击“重放”检查结果哈希，或点击“下载报告”保存审计报告。
+对样例数据（合成）问“7 月净销售额为什么下降？”，Golden 期望值在 `data/golden/expected_metrics.json`：
 
-支持的问题示例：
+- 2026-07 净销售额 **798,458**，环比 **-110,173**（**-12.13%**）
+- 区域贡献：华东 **-113,950**（占降幅 91.2%）、华南 +9,753、华北 +4,992、西南 -10,968
+- 页面同时给出：4 行区域明细表、贡献柱状图、“执行审计”（每次工具调用的成败）、快照 ID
 
-```text
-请检查订单数据有多少行，并只返回行数
-按渠道比较 6 月和 7 月的退款率变化
-净销售额的正式定义是什么？是否扣除退款？
+右侧“执行审计”面板里：
+
+- 点 **重放** → 按原 plan 重跑，显示“重放一致”，四个维度的 `changes` 全为 `false`
+- 点 **下载报告** → 导出 Markdown 报告（结论、明细、SQL、哈希、证据）
+- “证据引用”“原始结果”两个折叠面板可以逐条核对
+
+> 贡献拆解是数值分解，回答“哪个区域贡献了多少降幅”，不是因果推断。
+
+## 4. 架构与执行链路
+
+```mermaid
+flowchart TB
+    UI["Streamlit 界面<br/>127.0.0.1:8767"] --> APP["DesktopApp<br/>单用户会话"]
+    API["FastAPI 开发接口<br/>127.0.0.1:8766"] --> APP
+    APP --> MODE{"LLM 模式"}
+    MODE -->|mock| GRAPH["LangGraph 确定性图<br/>agent/graph.py"]
+    MODE -->|live| LOOP["模型工具循环<br/>Chat / Responses 双适配器"]
+    GRAPH --> REG["ToolRegistry<br/>12 个工具 · 参数校验<br/>stage 允许清单 · trace_id"]
+    LOOP --> REG
+    REG --> SEM["指标语义库<br/>data/semantic/metrics.yml"]
+    REG --> RAG["混合检索<br/>BM25 + 字符 n-gram 向量 · RRF"]
+    REG --> PLAN["AnalysisPlan → PlanCompiler<br/>参数化只读 SQL · sqlglot 校验"]
+    PLAN --> DUCK["DuckDB 内存执行<br/>read_csv 直读 CSV"]
+    DUCK --> VERIFY["数值校验<br/>change/rate 自洽 · 比率 overall 单独聚合"]
+    VERIFY --> EVID["证据链 EvidenceRef<br/>+ AnalysisSnapshot 四维哈希"]
+    EVID --> AUDIT["页面审计 / 重放 / 报告"]
+    EVID --> REPLAY["replay_analysis<br/>对比 data · semantic · knowledge · result"]
 ```
 
-## 数据格式
+分层职责与设计取舍见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；一次请求的时序和路由分支见 [`docs/RUNTIME_LOGIC.md`](docs/RUNTIME_LOGIC.md)。
 
-当前版本是订单经营分析专用软件，不是能理解任意 Excel 的通用 BI。额外列可以保留，但
-以下列名必须存在。
+### 4.1 为什么模型不直接写 SQL
 
-订单明细 `orders`：`order_id`, `paid_at`, `store_id`, `category`, `channel`,
-`paid_amount`, `refund_amount`。
+- 模型只产出 `AnalysisPlan`（`src/datapilot_verify/domain/models.py`）：指标、期间、维度、比较方式等字段，Pydantic 强校验（期间不重叠、维度白名单、贡献分析必须带 comparison）。
+- `PlanCompiler`（`src/datapilot_verify/compiler/`）把 plan 编译成带参数的只读 SQL，不是把模型输出拼进 SQL 字符串。
+- 执行前再由 `sqlglot` 校验：只允许单条 `SELECT`，写操作关键字进黑名单。
+- 执行结果的哈希和 SQL 一起进快照，事后能复核每条数字的来源。
 
-门店维表 `stores`：`store_id`, `region`, `city`。
+### 4.2 快照里存了什么
 
-程序会校验缺失字段；Excel 在本地转为 UTF-8 CSV。建议金额列为数字、时间列为标准日期，
-且两表 `store_id` 可关联。上传数据保存在 `D:\agent-gpt\workspace`。
+`AnalysisSnapshot`（`src/datapilot_verify/domain/models.py`）字段：
 
-## 结果与边界
+`snapshot_id` · `created_at` · `question` · `dataset_hashes`（orders / stores 的 SHA-256）· `semantic_version` · `knowledge_version` · `plan` · `tool_trace_ids` · `sql` · `python_code` · `result_hash` · `verification` · `replay_level`
 
-- 执行审计列出实际 Tool，失败步骤不会伪装成成功。
-- 证据引用包含数据、指标定义、知识文档或查询定位。
-- 快照保存数据哈希、指标/知识版本、分析计划、SQL、结果哈希和校验信息。
-- “重放一致”表示当前数据下结果哈希一致；数据或定义变化会显示差异。
-- 贡献拆解表示数值贡献，不等同于统计因果。
-- 未覆盖的问题会明确返回不支持，不编造答案。
-- 服务只绑定 `127.0.0.1`，没有账号、权限隔离和多人并发，不适合作为公网多租户服务。
-- live 模式会把问题及必要 Tool 上下文发送给配置的模型服务商，敏感数据请先确认合规。
+重放走 `src/datapilot_verify/tools/artifacts.py` 的 `replay_analysis`：按原 plan 重新执行，返回四个维度的差异——数据文件变没变、指标口径变没变、知识库变没变、结果哈希变没变。任何一项变化都会让 `identical` 变成 `false`，避免“看起来一样、其实换了数据”。
 
-## 开发/测试 API
+### 4.3 工具层是唯一入口
+
+所有工具调用都走 `ToolRegistry.execute()`（`src/datapilot_verify/tools/base.py`）：stage 允许清单 → Pydantic 参数校验 → 执行 → 异常归一。结果要么 `ok=True`，要么带六种错误码之一：`BAD_PARAMS` / `NOT_FOUND` / `POLICY_BLOCKED` / `EXECUTION_FAILED` / `TIMEOUT` / `INTERNAL`，模型据此自纠。
+
+注册的 12 个工具（`src/datapilot_verify/app.py` 的 `build_registry()`）：
+
+`inspect_dataset`、`register_dataset`、`define_relationship`、`resolve_metric`、`search_metric_docs`、`run_analysis`、`run_python_analysis`、`analyze_contribution`、`get_evidence`、`replay_analysis`、`make_chart`、`export_report`
+
+### 4.4 Python 工具不是裸 `exec`
+
+`run_python_analysis` 先过 `PythonPolicy`：AST 检查导入白名单、调用黑名单、禁用 dunder；真正执行在 `sys.executable -I` 子进程里，最小环境变量、15 秒超时，结果通过标记行取回。它是 **best-effort 沙箱**，不是安全边界（见[第 9 节](#9-已知限制)）。
+
+## 5. 质量证据
+
+下面每个数字都能在仓库里找到出处，也可以自己复现：
+
+| 指标 | 当前值 | 出处 | 复现 |
+| --- | --- | --- | --- |
+| 回归测试 | **87 passed** | `tests/`（24 个测试文件） | `python -m pytest` |
+| Golden Set | **8/8**，四个子指标均为 1.0 | `src/datapilot_verify/eval/runner.py`：4 个指标解析 + 3 个检索 + 1 个端到端贡献分析；期望值在 `data/golden/expected_metrics.json`；断言在 `tests/test_eval_runner.py` | `python -m datapilot_verify.eval.runner` |
+| 已记录问题 | **26 个** | `docs/BUGLOG.md` 汇总表；`docs/bugs/` 下 26 个档案 | 打开 BUGLOG |
+| 内置工具 | **12 个** | `src/datapilot_verify/app.py` 的 `build_registry()` | — |
+| 样例数据 | **3,123 行订单 / 11 家门店** | `data/sample/orders.csv`、`data/sample/stores.csv`；生成脚本 `scripts/generate_sample_data.py`（seed `20260830`） | 看 CSV，或重跑生成脚本 |
+
+几条说明：
+
+- Golden Set 是离线评测：固定问题集，分别检查指标解析是否正确、检索是否命中、执行结果是否等于期望值、回答里的数字是否忠于执行结果。
+- “87 passed” 是当前提交在本机 Python 3.11.16 上的结果；测试不依赖网络和 API Key。
+- BUGLOG 记录的是开发中真实踩到的问题（环境、协议兼容、聚合口径、沙箱策略等），不是装饰。
+
+## 6. 目录结构
+
+```
+datapilot-verify/
+├─ data/                    指标语义库、知识文档、样例数据、Golden 期望值（只读资产）
+├─ docs/                    架构、运行逻辑、BUGLOG 与 26 个问题档案
+├─ scripts/                 样例数据生成、演示与启动脚本
+├─ src/datapilot_verify/
+│  ├─ agent/                mock 图、live 工具循环、脚本化代理、期间解析
+│  ├─ tools/                12 个工具、ToolRegistry、快照与重放
+│  ├─ compiler/             AnalysisPlan → 只读 SQL
+│  ├─ engine/               DuckDB 执行与贡献拆解
+│  ├─ verification/         数值自洽校验
+│  ├─ sandbox/              Python 策略与隔离子进程
+│  ├─ rag/                  BM25 + 哈希向量混合检索
+│  ├─ semantic/             指标语义库加载与版本
+│  ├─ evidence/             证据与快照存储
+│  ├─ data/                 数据集画像与注册表
+│  ├─ domain/               Pydantic 契约
+│  └─ eval/                 Golden Set 评估
+├─ tests/                   87 个回归用例
+├─ webapp/                  Streamlit 界面、桌面服务、开发用 FastAPI、旧演示页
+├─ workspace/               业务数据（运行时生成，gitignore）
+└─ artifacts/               快照、报告、LangGraph 检查点（运行时生成，gitignore）
+```
+
+## 7. 常用命令
 
 ```powershell
-D:\agent-gpt\.conda-env\python.exe -m uvicorn webapp.api:app --host 127.0.0.1 --port 8766
+# 回归测试（87 passed）
+python -m pytest
+
+# Golden Set（8/8；结果同时写到 artifacts/eval/latest.json）
+python -m datapilot_verify.eval.runner
+
+# 查看当前生效配置（不会打印 API Key）
+python -m datapilot_verify.cli --show-config
+
+# 开发联调 API（127.0.0.1:8766，Swagger 在 /docs）
+uvicorn webapp.api:app --host 127.0.0.1 --port 8766
+
+# 重新生成样例数据（seed 固定，结果可复现；会重写 data/sample 与 data/golden）
+python scripts/generate_sample_data.py
 ```
 
-Swagger <http://127.0.0.1:8766/docs>、ReDoc `/redoc`、OpenAPI `/openapi.json`。接口包括
-`/api/analyze`, `/api/agent`, `/api/datasets`, `/api/evidence`, `/api/replay`, `/api/report`。
-普通用户不需要操作 Swagger。`8765` 是早期固定演示页，仅作历史视觉样例。
+Windows 上还有 `scripts\start_desktop.ps1`（启动界面）和 `scripts\demo_start.ps1`（演示：健康检查 → 启动 → 打开浏览器）。
 
-## 验证与目录
+## 8. 数据格式与口径
 
-```powershell
-D:\agent-gpt\.conda-env\python.exe -m pip check
-D:\agent-gpt\.conda-env\python.exe -m pytest
-D:\agent-gpt\.conda-env\Scripts\ruff.exe check src webapp tests scripts conftest.py
-```
+两张表，列名固定（额外列可以保留）：
 
-当前基线：`83 passed`，Golden Set `8/8`。主要目录：`webapp/streamlit_app.py`（界面）、
-`webapp/desktop.py`（单用户服务）、`src/datapilot_verify/`（Agent/Tool/RAG/执行/证据）、
-`workspace/`（用户数据）、`artifacts/desktop/`（快照和报告）、`docs/BUGLOG.md`（修改记录）。
+| 表 | 必需列 | 说明 |
+| --- | --- | --- |
+| `orders` | `order_id`, `paid_at`, `store_id`, `category`, `channel`, `paid_amount`, `refund_amount` | 订单明细，一行一单 |
+| `stores` | `store_id`, `region`, `city` | 门店维表 |
 
-## 常见问题
+支持上传 CSV / XLSX / XLS：Excel 在本地转成 UTF-8 CSV，覆盖 `workspace/orders.csv` 或 `workspace/stores.csv`；`data/sample/` 不会被修改。缺字段会明确报错。
 
-`8767` 打不开时确认启动窗口仍在运行，并用 `netstat -ano | Select-String ':8767'` 检查
-端口。`llm_mode=live` 但 `.env` 缺少 Key 时分析会直接报错提示，不会静默改用 mock；
-确认 `.env` 位于 `D:\agent-gpt` 且 Key 存在后重启。导入报缺字段时按上面的 schema
-修正表头。要恢复样例，退出后删除 workspace 中对应文件，重新启动会自动补回；
-删除业务数据前请备份。
+指标定义在 `data/semantic/metrics.yml`。改口径不需要改代码，但会改变 `semantic_version`，从而让历史快照的重放结果显式暴露差异。
 
-完整修改记录见 [docs/BUGLOG.md](docs/BUGLOG.md) 和 `docs/bugs/`；架构与运行逻辑、
-组件职责和设计理由见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+## 9. 已知限制
+
+- **单机单用户**：只监听 `127.0.0.1`，没有账号、权限隔离、租户概念，也没有多用户会话。
+- **没有并发/压测**：DuckDB 是单进程内存连接，Streamlit 单实例；没做过并发或大数据量压测。
+- **Python 沙箱是 best-effort**：AST 黑白名单 + `-I` 子进程 + 超时能挡住常见误用，挡不住蓄意攻击；残余绕过面见 `docs/ARCHITECTURE.md` 的“安全边界清单”。
+- **live 模式会把问题发给模型服务商**：默认 mock 不联网；切 live 后问题文本和必要的工具上下文会发到你配置的端点。
+- **数据面固定**：目前只支持订单 + 门店两张表，不是通用 BI；换 schema 需要改语义库和画像逻辑。
+- **平台**：主要在 Windows + Python 3.11 上验证；PowerShell 脚本是 Windows 专用。macOS/Linux 理论可用，未系统验证。
+- **样例数据是合成的**：seed `20260830`，用于演示和测试，不代表真实业务。
+- **贡献拆解不是因果推断**：它只回答“哪个维度贡献了多少数值变化”，不回答“为什么”。
+
+## 10. 开发环境（我的本机）
+
+以下是我的开发机配置，克隆者按第 2 节操作即可，不需要一致：
+
+- 路径：`D:\datapilot-verify`（原 `D:\agent-gpt`，改名后路径已全部同步）
+- Python：项目内前缀环境 `.conda-env`，3.11.16
+- 系统：Windows 11 + PowerShell
+- `.env`：live 模式（DeepSeek），本地保存、不入库
+- 常用：`scripts\start_desktop.ps1` 启动界面，`scripts\demo_start.ps1` 一键演示
+
+## 11. 常见问题
+
+- **8767 打不开**：确认启动窗口还在运行；用 `netstat -ano | Select-String ':8767'` 看端口是否被占用。
+- **live 模式报缺 Key**：`.env` 必须在仓库根目录且 `DATAPILOT_LLM_API_KEY` 有值；修改后重启。程序不会静默改用 mock。
+- **上传报缺字段**：按第 8 节的列名修正表头。
+- **想恢复样例数据**：删掉 `workspace/` 下对应 CSV，重启后会自动从 `data/sample/` 补回。
+- **只想看不联网的版本**：不建 `.env`，或把 `DATAPILOT_LLM_MODE` 设为 `mock`。
+
+## 12. 文档
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)：分层架构、关键设计决策与取舍
+- [`docs/RUNTIME_LOGIC.md`](docs/RUNTIME_LOGIC.md)：一次请求的完整时序与路由分支
+- [`docs/BUGLOG.md`](docs/BUGLOG.md)：26 个问题的汇总表，细节在 `docs/bugs/`
+
+## 13. License
+
+MIT，见 [`LICENSE`](LICENSE)。
