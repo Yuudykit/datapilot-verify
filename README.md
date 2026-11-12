@@ -2,6 +2,10 @@
 
 DataPilot Verify 支持本地表格分析和订单经营指标分析。通用表格按导入列执行可复核的统计，经营指标由 DuckDB 按统一口径计算。成功的分析保存计划和证据版本，支持重放核对。
 
+## 工程示意图
+
+![DataPilot Verify 工程示意图](docs/images/architecture.png)
+
 ## 快速演示
 
 在仓库根目录执行。Windows 上已有项目内的 `.conda-env` 时，直接使用其中的解释器。
