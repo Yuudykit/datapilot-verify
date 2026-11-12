@@ -2,7 +2,7 @@
 
 ## 摘要
 
-首次执行 `conda create --prefix D:\agent-gpt\.conda-env python=3.11 pip -y` 失败，Conda 默认配置的包缓存目录均不具备写权限。
+首次执行 `conda create --prefix D:\datapilot-verify\.conda-env python=3.11 pip -y` 失败，Conda 默认配置的包缓存目录均不具备写权限。
 
 ## 影响
 
@@ -12,7 +12,7 @@
 ## 复现
 
 ```powershell
-conda create --prefix D:\agent-gpt\.conda-env python=3.11 pip -y
+conda create --prefix D:\datapilot-verify\.conda-env python=3.11 pip -y
 ```
 
 错误：`NoWritablePkgsDirError`，默认目录包括 `D:\Anaconda\pkgs` 和用户 `.conda\pkgs`。
@@ -26,11 +26,11 @@ conda create --prefix D:\agent-gpt\.conda-env python=3.11 pip -y
 在创建环境的进程中设置：
 
 ```powershell
-$env:CONDA_PKGS_DIRS='D:\agent-gpt\.conda-pkgs'
-$env:CONDA_ENVS_PATH='D:\agent-gpt\.conda-envs'
+$env:CONDA_PKGS_DIRS='D:\datapilot-verify\.conda-pkgs'
+$env:CONDA_ENVS_PATH='D:\datapilot-verify\.conda-envs'
 ```
 
-然后继续使用项目内前缀 `D:\agent-gpt\.conda-env`。
+然后继续使用项目内前缀 `D:\datapilot-verify\.conda-env`。
 
 ## 验证
 

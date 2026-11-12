@@ -38,7 +38,7 @@ Agent 调用工具完成分析，返回带审计证据的结论。
 └──────────────┬───────────────────────────────────────┘
 ┌─ 工具层 ──────▼───────────────────────────────────────┐
 │ ToolRegistry（app.py 组装）：Pydantic 校验 + stage 允许清单      │
-│ + trace_id + 统一错误边界；11 个工具                          │
+│ + trace_id + 统一错误边界；12 个工具                          │
 └──────────────┬───────────────────────────────────────┘
 ┌─ 能力层 ──────▼───────────────────────────────────────┐
 │ PlanCompiler(SQL 生成+校验)  DuckDB 引擎  Python 沙箱          │
@@ -134,7 +134,7 @@ DesktopApp.analyze()
 
 | 组件 | 职责 |
 |---|---|
-| `app.py` | 唯一组装点 `build_registry()`：注册全部 11 个工具，绑定语义库与知识目录 |
+| `app.py` | 唯一组装点 `build_registry()`：注册全部 12 个工具，绑定语义库与知识目录 |
 | `tools/base.py` | `Tool`（名称/描述/参数模型/handler/stage）与 `ToolRegistry`。`execute()` 是所有工具调用的唯一入口：stage 允许清单 → Pydantic 校验（BAD_PARAMS）→ 执行（异常归一为 INTERNAL 并携带细节）→ trace_id 全程跟踪 |
 | `tools/analysis.py` | `run_analysis`：计划编译 → 执行 → 数值校验 → 贡献拆解 → overall 聚合 → 证据与逐值绑定 |
 | `tools/advanced.py` | `run_python_analysis`（受控 Python，最多两次修复尝试，产物留档）；`analyze_contribution`（对任意校验过的行算贡献率并自检合计=1） |

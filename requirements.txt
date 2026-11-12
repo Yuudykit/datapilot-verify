@@ -1,5 +1,5 @@
 # DataPilot Verify - complete direct dependency set
-# Python 3.11; install into D:\agent-gpt\.conda-env
+# Python 3.11; install into D:\datapilot-verify\.conda-env
 
 # Core (already installed in the current environment)
 duckdb==1.5.5

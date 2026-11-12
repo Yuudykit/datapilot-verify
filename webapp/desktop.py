@@ -177,7 +177,7 @@ class DesktopApp:
             if not settings.llm_api_key:
                 raise ValueError(
                     "DATAPILOT_LLM_MODE=live 但缺少 DATAPILOT_LLM_API_KEY；"
-                    "请在 D:\\agent-gpt\\.env 配置 Key 后重启，或改用 mock 模式。"
+                    "请在 D:\\datapilot-verify\\.env 配置 Key 后重启，或改用 mock 模式。"
                 )
             loop = build_live_tool_loop(
                 self.project_root,

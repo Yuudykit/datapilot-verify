@@ -11,7 +11,7 @@ click==8.5.0
 colorama==0.4.6
 coverage==7.16.0
 # Editable install with no version control (datapilot-verify==0.1.0)
--e d:\agent-gpt
+-e .
 distro==1.9.0
 duckdb==1.5.5
 et_xmlfile==2.0.0

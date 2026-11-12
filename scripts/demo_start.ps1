@@ -3,8 +3,9 @@
 # 功能：检测服务是否已启动 -> 未启动则启动 -> 等待健康检查通过 -> 打开浏览器
 
 $ErrorActionPreference = "Stop"
-$Root = "D:\agent-gpt"
+$Root = Split-Path -Parent $PSScriptRoot
 $Python = "$Root\.conda-env\python.exe"
+if (-not (Test-Path $Python)) { $Python = "$Root\.venv\Scripts\python.exe" }
 $Port = 8767
 $Url = "http://127.0.0.1:$Port"
 
@@ -14,6 +15,7 @@ Write-Host "==== DataPilot Verify 演示启动 ====" -ForegroundColor Cyan
 # ---- 1. 环境自检 ----
 if (-not (Test-Path $Python)) {
     Write-Host "[X] 未找到 Python 环境: $Python" -ForegroundColor Red
+    Write-Host "    期望位置: $Root\.conda-env\python.exe 或 $Root\.venv\Scripts\python.exe" -ForegroundColor Yellow
     Read-Host "按回车退出"; exit 1
 }
 if (-not (Test-Path "$Root\webapp\streamlit_app.py")) {

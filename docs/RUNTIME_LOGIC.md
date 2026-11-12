@@ -2,7 +2,7 @@
 
 ## 用户入口
 
-`scripts/start_desktop.ps1` 使用固定的 `D:\agent-gpt\.conda-env` 启动
+`scripts/start_desktop.ps1` 使用固定的 `D:\datapilot-verify\.conda-env` 启动
 `webapp/streamlit_app.py`，监听 `127.0.0.1:8767`。页面初始化一个缓存的
 `DesktopApp`，工作区是 `workspace/`，桌面产物是 `artifacts/desktop/`。
 

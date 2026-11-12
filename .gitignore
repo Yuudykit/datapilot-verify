@@ -20,3 +20,17 @@ traces/
 .vscode/
 .workbuddy/
 .streamlit/secrets.toml
+.venv/
+venv/
+.idea/
+.mypy_cache/
+Thumbs.db
+.DS_Store
+.dsh-acl-repair/
+
+# 内部规划文档，不公开
+项目规划书.md
+
+# 学习资料克隆的第三方仓库（体积大，不纳入版本管理）
+学习内容/repos/
+学习内容/电子书/
