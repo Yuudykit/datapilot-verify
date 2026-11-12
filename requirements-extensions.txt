@@ -1,4 +1,4 @@
-# Incremental install for the existing D:\datapilot-verify\.conda-env environment.
+# Incremental install for an existing project environment.
 # Core packages are intentionally omitted.
 
 # Agent and live LLM

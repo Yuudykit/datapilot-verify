@@ -143,6 +143,17 @@ class OfflineAgent:
         analysis = self.registry.execute(
             "run_analysis", {"plan": plan.model_dump(mode="json")}, self.context
         )
+        events = [
+            AgentEvent("resolve_metric", metric.trace_id, metric.ok, "解析指标"),
+            AgentEvent("search_metric_docs", docs.trace_id, docs.ok, "检索业务文档"),
+            AgentEvent("run_analysis", analysis.trace_id, analysis.ok, "执行并验证分析"),
+        ]
+        if not analysis.ok:
+            return AgentResponse(
+                status="error",
+                answer=analysis.error.message if analysis.error else "分析执行失败。",
+                events=events,
+            )
         rows = analysis.data.get("rows", [])
         metric_info = analysis.data.get("metric", {})
         name = metric_info.get("name", metric_id)
@@ -196,6 +207,7 @@ class OfflineAgent:
                 "stores": sha256_file(self.context.workspace / "stores.csv"),
             },
             semantic_version=analysis.data.get("metric", {}).get("version", "unknown"),
+            semantic_hash=analysis.data.get("semantic_hash"),
             knowledge_version=docs.data.get("knowledge_version", "unknown"),
             plan=plan,
             tool_trace_ids=[metric.trace_id, docs.trace_id, analysis.trace_id],
@@ -206,13 +218,9 @@ class OfflineAgent:
         self.snapshots.save(snapshot)
         citations = [item.model_dump(mode="json") for item in docs.evidence + analysis.evidence]
         return AgentResponse(
-            status="completed" if analysis.ok else "error",
+            status="completed",
             answer=answer,
-            events=[
-                AgentEvent("resolve_metric", metric.trace_id, metric.ok, "解析指标"),
-                AgentEvent("search_metric_docs", docs.trace_id, docs.ok, "检索业务文档"),
-                AgentEvent("run_analysis", analysis.trace_id, analysis.ok, "执行并验证分析"),
-            ],
+            events=events,
             data={
                 "plan": plan.model_dump(mode="json"),
                 "rows": rows,

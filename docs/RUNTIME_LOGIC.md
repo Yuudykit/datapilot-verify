@@ -2,8 +2,8 @@
 
 ## 用户入口
 
-`scripts/start_desktop.ps1` 使用固定的 `D:\datapilot-verify\.conda-env` 启动
-`webapp/streamlit_app.py`，监听 `127.0.0.1:8767`。页面初始化一个缓存的
+`scripts/start_desktop.ps1` 依次查找仓库内的 `.conda-env`、`.venv` 和 PATH 中的 Python，
+再启动 `webapp/streamlit_app.py`，监听 `127.0.0.1:8767`。页面初始化一个缓存的
 `DesktopApp`，工作区是 `workspace/`，桌面产物是 `artifacts/desktop/`。
 
 ## 一次分析的主链路
@@ -25,9 +25,9 @@ Streamlit 输入问题
 
 ## 数据导入
 
-用户在页面选择 `orders` 或 `stores` 角色并上传 CSV/Excel。`DesktopApp.upload` 校验扩展名
-和必需列，Excel 转成 UTF-8 CSV，覆盖 `workspace/orders.csv` 或 `workspace/stores.csv`。
-`data/sample/` 只作为缺文件时的初始化模板，不参与业务数据覆盖。
+经营分析可上传订单明细或门店维表。`DesktopApp.upload` 校验扩展名和必需列，将数据保存到
+`workspace/orders.csv` 或 `workspace/stores.csv`。`data/sample/` 提供缺文件时的初始化模板。
+通用表格按选定的工作表和表头导入，在 `workspace/tables/` 保存 UTF-8 CSV 及其元数据。
 
 ## Tool 层
 
@@ -56,11 +56,8 @@ SQL、Tool trace ID、结果哈希和校验状态。点击“重放”时，系�
 - `artifacts/langgraph`、`artifacts/live`：历史或开发运行状态；桌面用户产物使用
   `artifacts/desktop`。
 
-## 运行时保留清单
+## 本地配置与产物
 
-必须保留：`.env`、`.env.example`、`pyproject.toml`、`requirements*.txt`、`environment.yml`、
-`src/`、`webapp/streamlit_app.py`、`webapp/desktop.py`、`data/`、`workspace/`、
-`scripts/start_desktop.ps1` 和 `artifacts/desktop/`。
-
-可再生但暂未删除：`.conda-pkgs`、Python `__pycache__`、pytest/Ruff 缓存、安装日志和旧的
-API/演示/测试 artifacts。它们不属于运行链路，但删除动作因 Windows 审批服务 503 未执行。
+离线模式可直接用随仓库发布的样例运行。真实模型的本机配置以 `.env.example` 为模板，
+写入 Git 忽略的 `.env`。导入数据与运行产物分别保存在 `workspace/` 和 `artifacts/`，
+两者均由 Git 忽略。

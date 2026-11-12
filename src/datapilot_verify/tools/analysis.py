@@ -7,11 +7,13 @@ from pydantic import BaseModel
 from datapilot_verify.compiler import PlanCompiler
 from datapilot_verify.domain.models import (
     AnalysisPlan,
+    ErrorCode,
     EvidenceBinding,
     EvidenceRef,
+    ToolError,
     ToolResult,
 )
-from datapilot_verify.engine import DuckDBEngine, enrich_contribution
+from datapilot_verify.engine import DuckDBEngine, InvalidStoreData, enrich_contribution
 from datapilot_verify.semantic import SemanticRepository
 from datapilot_verify.tools.base import Tool, ToolContext, tool
 from datapilot_verify.verification import verify_comparison_rows
@@ -35,17 +37,24 @@ def build_run_analysis_tool(semantic_path: Path) -> Tool:
         if metric is None:
             raise ValueError(f"unknown metric: {args.plan.metric}")
         compiled = PlanCompiler().compile(args.plan, metric)
-        result = DuckDBEngine(context.workspace).execute(compiled)
-        rows = result.rows
-        overall = None
+        engine = DuckDBEngine(context.workspace)
         overall_compiled = None
         if args.plan.comparison is not None and args.plan.dimensions:
             overall_plan = args.plan.model_copy(
                 update={"dimensions": [], "analysis": "aggregate", "sort": [], "limit": None}
             )
             overall_compiled = PlanCompiler().compile(overall_plan, metric)
-            overall_result = DuckDBEngine(context.workspace).execute(overall_compiled)
-            overall = overall_result.rows[0] if overall_result.rows else None
+        try:
+            result = engine.execute(compiled)
+            overall_result = engine.execute(overall_compiled) if overall_compiled else None
+        except InvalidStoreData as exc:
+            return ToolResult(
+                ok=False,
+                error=ToolError(code=ErrorCode.EXECUTION_FAILED, message=str(exc)),
+                trace_id=trace_id,
+            )
+        rows = result.rows
+        overall = overall_result.rows[0] if overall_result and overall_result.rows else None
         verification = None
         if args.plan.comparison is not None:
             verification = verify_comparison_rows(rows)
@@ -105,6 +114,7 @@ def build_run_analysis_tool(semantic_path: Path) -> Tool:
                 "plan_id": args.plan.plan_id,
                 "plan": args.plan.model_dump(mode="json"),
                 "metric": metric.model_dump(mode="json"),
+                "semantic_hash": semantic.content_hash,
                 "rows": rows,
                 "overall": overall,
                 "row_count": result.row_count,
@@ -118,6 +128,11 @@ def build_run_analysis_tool(semantic_path: Path) -> Tool:
             evidence=evidence,
             bindings=bindings,
             warnings=warnings,
+            error=(
+                ToolError(code=ErrorCode.EXECUTION_FAILED, message="数值校验失败。")
+                if verification and not verification.passed
+                else None
+            ),
             trace_id=trace_id,
         )
 

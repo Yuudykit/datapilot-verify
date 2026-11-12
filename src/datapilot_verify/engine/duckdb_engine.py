@@ -9,6 +9,10 @@ from typing import Any
 from datapilot_verify.compiler import CompiledQuery
 
 
+class InvalidStoreData(ValueError):
+    """The store dimension does not have a unique, non-empty key."""
+
+
 @dataclass(frozen=True)
 class QueryResult:
     columns: list[str]
@@ -36,7 +40,17 @@ class DuckDBEngine:
             connection.execute(f"SET memory_limit='{self.memory_limit}'")
             connection.execute(f"SET threads={self.threads}")
             connection.read_csv(str(orders), header=True).create_view("orders")
-            connection.read_csv(str(stores), header=True).create_view("stores")
+            connection.read_csv(str(stores), header=True).create("stores")
+            invalid_key = connection.execute("""
+                SELECT store_id
+                FROM stores
+                GROUP BY store_id
+                HAVING store_id IS NULL OR trim(CAST(store_id AS VARCHAR)) = ''
+                    OR count(*) > 1
+                LIMIT 1
+                """).fetchone()
+            if invalid_key is not None:
+                raise InvalidStoreData("门店表 stores.csv 的 store_id 必须非空且唯一。")
             cursor = connection.execute(query.sql, query.parameters)
             columns = [item[0] for item in cursor.description]
             rows = [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]

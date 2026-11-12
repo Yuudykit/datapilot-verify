@@ -167,14 +167,38 @@ class AnalysisPlan(BaseModel):
         return self
 
 
+class TablePlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str = Field(pattern=r"^table_[0-9a-f]{12}$")
+    operation: Literal["profile", "count", "sum", "mean", "min", "max"]
+    group_by: str | None = None
+    value_column: str | None = None
+    filter_column: str | None = None
+    filter_value: str | None = None
+
+    @model_validator(mode="after")
+    def validate_fields(self) -> TablePlan:
+        if (self.operation not in {"profile", "count"}) != bool(self.value_column):
+            raise ValueError("数值汇总需要指定一个数值字段")
+        if (self.filter_column is None) != (self.filter_value is None):
+            raise ValueError("筛选需要同时指定字段和值")
+        if self.operation == "profile" and (self.group_by or self.filter_column):
+            raise ValueError("数据质量检查针对整张表")
+        return self
+
+
 class AnalysisSnapshot(BaseModel):
     snapshot_id: str
     created_at: datetime
     question: str
     dataset_hashes: dict[str, str]
     semantic_version: str
+    semantic_hash: str | None = None
     knowledge_version: str
     plan: AnalysisPlan | None = None
+    table_plan: TablePlan | None = None
+    table_source: dict[str, Any] | None = None
     tool_trace_ids: list[str] = Field(default_factory=list)
     sql: str | None = None
     python_code: str | None = None

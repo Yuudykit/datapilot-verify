@@ -1,0 +1,28 @@
+name: Project checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    env:
+      DATAPILOT_LLM_MODE: mock
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install -e ".[agent,ui,mcp,dev]"
+      - run: python -m ruff check src tests webapp scripts conftest.py
+      - run: python -m pytest
+      - run: python -m datapilot_verify.eval.runner
+      - run: python scripts/run_demo.py
+      - run: python -m datapilot_verify.mcp_server --help

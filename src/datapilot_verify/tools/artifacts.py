@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from datapilot_verify.data.tables import execute_table_plan
 from datapilot_verify.domain.models import (
     ArtifactRef,
     ErrorCode,
@@ -103,6 +104,32 @@ def build_artifact_tools(
         snapshot, failure = _load_snapshot(context, args.snapshot_id, trace_id)
         if failure is not None:
             return failure
+        if snapshot.table_plan is not None:
+            plan = snapshot.table_plan
+            try:
+                data, source_hash, result_hash = execute_table_plan(context.workspace, plan)
+            except (ValueError, OSError) as exc:
+                code = ErrorCode.NOT_FOUND if isinstance(exc, FileNotFoundError) else (
+                    ErrorCode.EXECUTION_FAILED
+                )
+                return ToolResult(
+                    ok=False, error=ToolError(code=code, message=f"通用表格重放失败：{exc}"),
+                    trace_id=trace_id,
+                )
+            changes = {
+                "data": {plan.dataset_id: source_hash} != snapshot.dataset_hashes,
+                "result": result_hash != snapshot.result_hash,
+            }
+            return ToolResult(
+                ok=True,
+                data={
+                    "snapshot_id": snapshot.snapshot_id,
+                    "identical": not any(changes.values()),
+                    "changes": changes,
+                    "result": data,
+                },
+                trace_id=trace_id,
+            )
         if snapshot.plan is None:
             raise ValueError("snapshot has no replayable analysis plan")
         from datapilot_verify.tools.analysis import build_run_analysis_tool
@@ -123,7 +150,14 @@ def build_artifact_tools(
         }
         changes = {
             "data": current_dataset_hashes != snapshot.dataset_hashes,
-            "semantic": metric is None or metric.version != snapshot.semantic_version,
+            "semantic": (
+                metric is None
+                or metric.version != snapshot.semantic_version
+                or (
+                    snapshot.semantic_hash is not None
+                    and semantic.content_hash != snapshot.semantic_hash
+                )
+            ),
             "knowledge": HybridRetriever(knowledge_dir).version != snapshot.knowledge_version,
             "result": current_hash != snapshot.result_hash,
         }
@@ -133,7 +167,7 @@ def build_artifact_tools(
                 "snapshot_id": snapshot.snapshot_id,
                 "original_result_hash": snapshot.result_hash,
                 "replayed_result_hash": current_hash,
-                "identical": current_hash == snapshot.result_hash,
+                "identical": result.ok and not any(changes.values()),
                 "changes": changes,
                 "current_dataset_hashes": current_dataset_hashes,
                 "current_semantic_version": metric.version if metric else None,

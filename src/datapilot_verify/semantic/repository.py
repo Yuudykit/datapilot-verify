@@ -25,16 +25,14 @@ class SemanticRepository:
         self._load()
 
     def _load(self) -> None:
-        payload = yaml.safe_load(self.path.read_text(encoding="utf-8"))
+        source = self.path.read_bytes()
+        payload = yaml.safe_load(source.decode("utf-8"))
+        self.content_hash = hashlib.sha256(source).hexdigest()
         self.version = str(payload["version"])
         self._metrics = {
             metric_id: MetricDefinition.model_validate(definition)
             for metric_id, definition in payload["metrics"].items()
         }
-
-    @property
-    def content_hash(self) -> str:
-        return hashlib.sha256(self.path.read_bytes()).hexdigest()
 
     def get(self, metric_id: str) -> MetricDefinition | None:
         return self._metrics.get(metric_id)

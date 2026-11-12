@@ -243,6 +243,14 @@ class DataPilotGraph:
         result = self.registry.execute(
             "run_analysis", {"plan": plan.model_dump(mode="json")}, self.context
         )
+        events = [*state.get("events", []), _event("run_analysis", result, "执行并验证分析")]
+        if not result.ok:
+            return {
+                "status": "error",
+                "answer": result.error.message if result.error else "分析执行失败。",
+                "events": events,
+                "snapshot_id": None,
+            }
         rows = result.data.get("rows", [])
         top = max(rows, key=lambda row: abs(row.get("change_amount", 0))) if rows else {}
         metric = result.data.get("metric", {})
@@ -277,6 +285,7 @@ class DataPilotGraph:
                 "stores": sha256_file(self.context.workspace / "stores.csv"),
             },
             semantic_version=metric.get("version", "unknown"),
+            semantic_hash=result.data.get("semantic_hash"),
             knowledge_version=state.get("data", {}).get("knowledge_version", "unknown"),
             plan=plan,
             tool_trace_ids=[item["trace_id"] for item in state.get("events", [])]
@@ -288,9 +297,9 @@ class DataPilotGraph:
         )
         SnapshotStore(self.context.output_dir / "snapshots").save(snapshot)
         return {
-            "status": "completed" if result.ok else "error",
+            "status": "completed",
             "answer": answer,
-            "events": [*state.get("events", []), _event("run_analysis", result, "执行并验证分析")],
+            "events": events,
             "data": {**state.get("data", {}), "plan": plan.model_dump(mode="json"), **result.data},
             "citations": [
                 *state.get("citations", []),
@@ -310,7 +319,16 @@ class DataPilotGraph:
             return {"status": "error", "answer": "问题不能为空。", "events": []}
         config = {"configurable": {"thread_id": thread_id or f"thread_{uuid.uuid4().hex[:10]}"}}
         result = self.graph.invoke(
-            {"question": question, "metric_choice": metric_choice, "events": []}, config
+            {
+                "question": question,
+                "metric_choice": metric_choice,
+                "events": [],
+                "data": {},
+                "citations": [],
+                "clarification": None,
+                "snapshot_id": None,
+            },
+            config,
         )
         return self._public_result(result, config["configurable"]["thread_id"])
 

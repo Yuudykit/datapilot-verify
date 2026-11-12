@@ -20,7 +20,7 @@ class EvalReport:
     metric_resolution_accuracy: float
     retrieval_recall_at_5: float
     execution_accuracy: float
-    numeric_faithfulness: float
+    numeric_consistency: float
     details: list[dict[str, object]]
 
 
@@ -79,11 +79,17 @@ def run_eval(project_root: Path = ROOT) -> EvalReport:
     )
     analysis = registry.execute("run_analysis", {"plan": plan.model_dump(mode="json")}, context)
     rows = analysis.data.get("rows", [])
+    overall = analysis.data.get("overall") or {}
+    region_changes = {row["region"]: row["change_amount"] for row in rows}
     execution_passed = bool(
         analysis.ok
         and rows
+        and len(rows) == len(expected["region_changes"])
+        and region_changes == expected["region_changes"]
         and rows[0]["region"] == expected["largest_decline_region"]
-        and rows[0]["change_amount"] == expected["region_changes"]["华东"]
+        and overall.get("previous_value") == expected["net_sales"]["2026-06"]
+        and overall.get("current_value") == expected["net_sales"]["2026-07"]
+        and overall.get("change_amount") == expected["change_amount"]
     )
     numeric_passed = bool(analysis.data.get("verification", {}).get("passed"))
     details.append(
@@ -91,7 +97,8 @@ def run_eval(project_root: Path = ROOT) -> EvalReport:
             "kind": "analysis",
             "query": plan.question,
             "passed": execution_passed and numeric_passed,
-            "top_row": rows[0] if rows else None,
+            "overall": overall,
+            "region_changes": region_changes,
         }
     )
     passed = metric_passed + retrieval_passed + int(execution_passed and numeric_passed)
@@ -102,7 +109,7 @@ def run_eval(project_root: Path = ROOT) -> EvalReport:
         metric_resolution_accuracy=metric_passed / len(metric_cases),
         retrieval_recall_at_5=retrieval_passed / len(retrieval_cases),
         execution_accuracy=float(execution_passed),
-        numeric_faithfulness=float(numeric_passed),
+        numeric_consistency=float(numeric_passed),
         details=details,
     )
 

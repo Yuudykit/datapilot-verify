@@ -1,7 +1,7 @@
 # DataPilot Verify - complete direct dependency set
-# Python 3.11; install into D:\datapilot-verify\.conda-env
+# Python 3.11. For a fresh checkout, use the README's editable installation.
 
-# Core (already installed in the current environment)
+# Core
 duckdb==1.5.5
 numpy==2.4.6
 pandas==3.0.5

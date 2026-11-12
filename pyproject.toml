@@ -24,15 +24,18 @@ dependencies = [
 agent = [
   "httpx>=0.28",
   "langgraph>=1.0",
+  "langgraph-checkpoint-sqlite>=2.0",
   "openai>=2.0",
 ]
 ui = [
   "fastapi>=0.135",
+  "openpyxl>=3.1",
   "plotly>=6.3",
   "python-multipart>=0.0.20",
   "streamlit>=1.48",
   "uvicorn>=0.35",
 ]
+mcp = ["mcp>=2.2,<3"]
 science = [
   "openpyxl>=3.1",
   "pandera>=0.26",
@@ -48,7 +51,7 @@ dev = [
   "ruff>=0.12",
 ]
 full = [
-  "datapilot-verify[agent,ui,science,dev]",
+  "datapilot-verify[agent,ui,mcp,science,dev]",
 ]
 
 [project.scripts]

@@ -10,7 +10,15 @@ from typing import Any
 from datapilot_verify.agent import build_graph, build_live_tool_loop
 from datapilot_verify.config import get_settings
 from datapilot_verify.data import DatasetCatalog
-from datapilot_verify.domain.models import AnalysisSnapshot
+from datapilot_verify.data.tables import (
+    OPERATIONS,
+    execute_table_plan,
+    import_table,
+    list_tables,
+    parse_question,
+    table_metadata,
+)
+from datapilot_verify.domain.models import AnalysisSnapshot, TablePlan
 from datapilot_verify.evidence import SnapshotStore, sha256_file
 from datapilot_verify.tools import ToolContext
 
@@ -40,6 +48,12 @@ def normalize_live_result(
     ]
     normalized = {**result, "events": events, "citations": [], "data": {}}
     if analysis is None:
+        failed_analysis = next(
+            (item for item in reversed(trace) if item.get("name") == "run_analysis"), None
+        )
+        if failed_analysis is not None:
+            error = failed_analysis.get("result", {}).get("error") or {}
+            normalized.update(status="error", answer=error.get("message") or "分析执行失败。")
         return normalized
     payload = analysis["result"]
     data = payload.get("data", {})
@@ -75,6 +89,7 @@ def normalize_live_result(
             for name in ("orders", "stores")
         },
         semantic_version=metric.get("version", "unknown"),
+        semantic_hash=data.get("semantic_hash"),
         knowledge_version=knowledge or "unknown",
         plan=plan_payload,
         tool_trace_ids=[item["trace_id"] for item in events if item["trace_id"]],
@@ -137,7 +152,16 @@ class DesktopApp:
             if path.is_file() and path.suffix.casefold() in DatasetCatalog.SUPPORTED_SUFFIXES
         ]
 
-    def upload(self, filename: str, content: bytes, role: str) -> dict[str, Any]:
+    def tables(self) -> list[dict[str, Any]]:
+        return list_tables(self.workspace)
+
+    def upload(
+        self, filename: str, content: bytes, role: str = "table",
+        *, sheet: str | None = None, header_row: int = 1,
+    ) -> dict[str, Any]:
+        if role == "table":
+            return import_table(self.workspace, filename, content, sheet, header_row)
+
         import io
 
         import pandas as pd
@@ -171,13 +195,58 @@ class DesktopApp:
         frame.to_csv(target, index=False, encoding="utf-8")
         return DatasetCatalog(self.workspace).profile(target.name).model_dump(mode="json")
 
+    def analyze_table(self, question: str, table: str | TablePlan) -> dict[str, Any]:
+        plan = parse_question(table, question) if isinstance(table, str) else table
+        metadata = table_metadata(self.workspace, plan.dataset_id)
+        data, source_hash, result_hash = execute_table_plan(self.workspace, plan)
+        source = metadata["filename"]
+        if metadata["sheet"]:
+            source += f" / {metadata['sheet']}"
+        title = OPERATIONS[plan.operation]
+        if plan.operation == "profile":
+            answer = (
+                f"「{source}」有 {data['row_count']:,} 条非空记录、{len(data['rows'])} 个字段。"
+                f"完全重复的记录有 {data['duplicate_rows']:,} 条。"
+            )
+        elif plan.group_by:
+            answer = (
+                f"「{source}」按「{plan.group_by}」统计{title}。"
+                f"本次纳入 {data['row_count']:,} 条记录。"
+            )
+        else:
+            value = data["rows"][0]["value"]
+            answer = f"「{source}」{title}为 {value if value is not None else '无可用数值'}。"
+        snapshot_id = f"snap_{uuid.uuid4().hex[:12]}"
+        trace_id = f"tool_{uuid.uuid4().hex[:12]}"
+        SnapshotStore(self.output / "snapshots").save(AnalysisSnapshot(
+            snapshot_id=snapshot_id,
+            created_at=datetime.now(UTC),
+            question=question,
+            dataset_hashes={plan.dataset_id: source_hash},
+            semantic_version="n/a",
+            knowledge_version="n/a",
+            table_plan=plan,
+            table_source=metadata,
+            tool_trace_ids=[trace_id],
+            result_hash=result_hash,
+            replay_level="strong",
+        ))
+        return {
+            "status": "completed",
+            "answer": answer,
+            "data": {"table_result": data, "table_plan": plan.model_dump(mode="json")},
+            "snapshot_id": snapshot_id,
+            "events": [{"label": title, "tool": "analyze_table", "trace_id": trace_id, "ok": True}],
+            "citations": [{"label": "导入表格", "source": source, "version": source_hash}],
+        }
+
     def analyze(self, question: str, metric_choice: str | None = None) -> dict[str, Any]:
         settings = get_settings()
         if settings.llm_mode == "live":
             if not settings.llm_api_key:
                 raise ValueError(
                     "DATAPILOT_LLM_MODE=live 但缺少 DATAPILOT_LLM_API_KEY；"
-                    "请在 D:\\datapilot-verify\\.env 配置 Key 后重启，或改用 mock 模式。"
+                    "请在项目根目录的 .env 配置 Key 后重启，或改用 mock 模式。"
                 )
             loop = build_live_tool_loop(
                 self.project_root,
